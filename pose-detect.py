@@ -278,24 +278,24 @@ def detect(model="mobilenet_thin", # A model option for being cool
             img = img.unsqueeze(0)
         
         print("nap time:", img.shape)
-        epochs = 1
+        epochs = 10000
         time_two = time_sync()
-        #for i in range(0, epochs):
-        pred = model(img, augment=augment)[0]
+        for i in range(0, epochs):
+            pred = model(img, augment=augment)[0]
         time_twoHalf = time_sync()
-        #for i in range(0, epochs):
-        pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)        
-        #pred = bread
+        for i in range(0, epochs):
+            bread = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)        
+        pred = bread
         time_three = time_sync()
-        """
-        print("Dataset Preparation:", time_two - time_one)
-        print("Readying keypoints:", timeDeblurOne - t1)
-        print("Deblurring:", timeDeblurTwo - timeDeblurOne)
+        
+        #print("Dataset Preparation:", time_two - time_one)
+        #print("Readying keypoints:", timeDeblurOne - t1)
+        #print("Deblurring:", timeDeblurTwo - timeDeblurOne)
         print("Inference:", (time_twoHalf - time_two) / epochs)
         print("NMS:", (time_three - time_twoHalf) / epochs)
         print("Inference + NMS:", (time_three - time_two) / epochs)
         #FLOPs = high.stop_counters()
-        """
+        
         t2 = time_sync()
         
         # Apply Classifier
