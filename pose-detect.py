@@ -263,7 +263,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
         # Deblurring image
         timeDeblurOne = time_sync()
         img = myImg
-        #img = predictor(myImg, None)
+        img = predictor(myImg, None)
         img = img.transpose((2, 0, 1))[::-1]  # BGR to RGB, BHWC to BCHW
         img = np.ascontiguousarray(img)
         timeDeblurTwo = time_sync()
@@ -278,7 +278,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
             img = img.unsqueeze(0)
         
         print("nap time:", img.shape)
-        epochs = 10000
+        epochs = 1
         time_two = time_sync()
         for i in range(0, epochs):
             pred = model(img, augment=augment)[0]

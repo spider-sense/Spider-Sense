@@ -357,7 +357,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
           
         # running actual inference + NMS
         print("nap time:", bigIm.shape)
-        epochs = 10000
+        epochs = 1
         time_two = time_sync()
         for i in range(0, epochs):
             pred = model(bigIm, augment=augment)[0]
