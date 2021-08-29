@@ -8,11 +8,12 @@ from threading import Lock
 import rospy
 import rospkg
 from cv_bridge import CvBridge, CvBridgeError
+from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from tfpose_ros.msg import Persons, Person, BodyPartElm
 
-from estimator import TfPoseEstimator
-from networks import model_wh, get_graph_path
+from tf_pose.estimator import TfPoseEstimator
+from tf_pose.networks import model_wh, get_graph_path
 
 
 def humans_to_msg(humans):
@@ -40,7 +41,7 @@ def callback_image(data):
     try:
         cv_image = cv_bridge.imgmsg_to_cv2(data, "bgr8")
     except CvBridgeError as e:
-        rospy.logerr('[ros-video-recorder][VideoFrames] Converting Image Error. ' + str(e))
+        rospy.logerr('[tf-pose-estimation] Converting Image Error. ' + str(e))
         return
 
     acquired = tf_lock.acquire(False)
@@ -48,7 +49,7 @@ def callback_image(data):
         return
 
     try:
-        humans = pose_estimator.inference(cv_image, scales)
+        humans = pose_estimator.inference(cv_image, resize_to_default=True, upsample_size=resize_out_ratio)
     finally:
         tf_lock.release()
 
@@ -58,28 +59,26 @@ def callback_image(data):
     msg.header = data.header
 
     pub_pose.publish(msg)
-    # rospy.loginfo(time.time() - et)
 
 
 if __name__ == '__main__':
     rospy.loginfo('initialization+')
-    rospy.init_node('TfPoseEstimatorROS', anonymous=True)
+    rospy.init_node('TfPoseEstimatorROS', anonymous=True, log_level=rospy.INFO)
 
     # parameters
     image_topic = rospy.get_param('~camera', '')
-    model = rospy.get_param('~model', 'cmu_640x480')
-    scales = rospy.get_param('~scales', '[None]')
-    scales = ast.literal_eval(scales)
-    tf_lock = Lock()
+    model = rospy.get_param('~model', 'cmu')
 
-    rospy.loginfo('[TfPoseEstimatorROS] scales(%d)=%s' % (len(scales), str(scales)))
+    resolution = rospy.get_param('~resolution', '432x368')
+    resize_out_ratio = float(rospy.get_param('~resize_out_ratio', '4.0'))
+    tf_lock = Lock()
 
     if not image_topic:
         rospy.logerr('Parameter \'camera\' is not provided.')
         sys.exit(-1)
 
     try:
-        w, h = model_wh(model)
+        w, h = model_wh(resolution)
         graph_path = get_graph_path(model)
 
         rospack = rospkg.RosPack()

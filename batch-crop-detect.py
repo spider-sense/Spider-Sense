@@ -27,10 +27,10 @@ import logging
 import time
 import ast
 
-import common
+import tf_pose.common
 import numpy as np
-from estimator import TfPoseEstimator
-from networks import get_graph_path, model_wh
+from tf_pose.estimator import TfPoseEstimator
+from tf_pose.networks import get_graph_path, model_wh
 
 from lifting.prob_model import Prob3dPose
 from lifting.draw import plot_pose

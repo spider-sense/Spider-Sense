@@ -24,12 +24,13 @@ import tensorflow as tf
 from tensorpack.dataflow import MultiThreadMapData
 from tensorpack.dataflow.image import MapDataComponent
 from tensorpack.dataflow.common import BatchData, MapData
-from tensorpack.dataflow.prefetch import PrefetchData
+from tensorpack.dataflow.parallel import PrefetchData
 from tensorpack.dataflow.base import RNGDataFlow, DataFlowTerminated
 
 from pycocotools.coco import COCO
 from pose_augment import pose_flip, pose_rotation, pose_to_img, pose_crop_random, \
     pose_resize_shortestedge_random, pose_resize_shortestedge_fixed, pose_crop_center, pose_random_scale
+from numba import jit
 
 logging.getLogger("requests").setLevel(logging.WARNING)
 logger = logging.getLogger('pose_dataset')
@@ -103,6 +104,7 @@ class CocoMetadata:
 
         # logger.debug('joint size=%d' % len(self.joint_list))
 
+    @jit
     def get_heatmap(self, target_size):
         heatmap = np.zeros((CocoMetadata.__coco_parts, self.height, self.width), dtype=np.float32)
 
@@ -123,6 +125,7 @@ class CocoMetadata:
         return heatmap.astype(np.float16)
 
     @staticmethod
+    @jit(nopython=True)
     def put_heatmap(heatmap, plane_idx, center, sigma):
         center_x, center_y = center
         _, height, width = heatmap.shape[:3]
@@ -145,6 +148,7 @@ class CocoMetadata:
                 heatmap[plane_idx][y][x] = max(heatmap[plane_idx][y][x], math.exp(-exp))
                 heatmap[plane_idx][y][x] = min(heatmap[plane_idx][y][x], 1.0)
 
+    @jit
     def get_vectormap(self, target_size):
         vectormap = np.zeros((CocoMetadata.__coco_parts*2, self.height, self.width), dtype=np.float32)
         countmap = np.zeros((CocoMetadata.__coco_parts, self.height, self.width), dtype=np.int16)
@@ -175,6 +179,7 @@ class CocoMetadata:
         return vectormap.astype(np.float16)
 
     @staticmethod
+    @jit(nopython=True)
     def put_vectormap(vectormap, countmap, plane_idx, center_from, center_to, threshold=8):
         _, height, width = vectormap.shape[:3]
 
@@ -364,7 +369,7 @@ def get_dataflow(path, is_train, img_path=None):
         #     ]), 0.7)
         # ]
         # ds = AugmentImageComponent(ds, augs)
-        ds = PrefetchData(ds, 1000, multiprocessing.cpu_count() * 4)
+        ds = PrefetchData(ds, 1000, multiprocessing.cpu_count() * 1)
     else:
         ds = MultiThreadMapData(ds, nr_thread=16, map_func=read_image_url, buffer_size=1000)
         ds = MapDataComponent(ds, pose_resize_shortestedge_fixed)
@@ -375,14 +380,22 @@ def get_dataflow(path, is_train, img_path=None):
     return ds
 
 
+def _get_dataflow_onlyread(path, is_train, img_path=None):
+    ds = CocoPose(path, img_path, is_train)  # read data from lmdb
+    ds = MapData(ds, read_image_url)
+    ds = MapData(ds, pose_to_img)
+    # ds = PrefetchData(ds, 1000, multiprocessing.cpu_count() * 4)
+    return ds
+
+
 def get_dataflow_batch(path, is_train, batchsize, img_path=None):
     logger.info('dataflow img_path=%s' % img_path)
     ds = get_dataflow(path, is_train, img_path=img_path)
     ds = BatchData(ds, batchsize)
-    if is_train:
-        ds = PrefetchData(ds, 10, 2)
-    else:
-        ds = PrefetchData(ds, 50, 2)
+    # if is_train:
+    #     ds = PrefetchData(ds, 10, 2)
+    # else:
+    #     ds = PrefetchData(ds, 50, 2)
 
     return ds
 
@@ -459,15 +472,18 @@ class DataFlowToQueue(threading.Thread):
 if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
-    from src.pose_augment import set_network_input_wh
+    from pose_augment import set_network_input_wh, set_network_scale
     # set_network_input_wh(368, 368)
     set_network_input_wh(480, 320)
+    set_network_scale(8)
 
-    df = get_dataflow('/root/coco/annotations', True, img_path='http://gpu-twg.kakaocdn.net/braincloud/COCO/')
+    # df = get_dataflow('/data/public/rw/coco/annotations', True, '/data/public/rw/coco/')
+    df = _get_dataflow_onlyread('/data/public/rw/coco/annotations', True, '/data/public/rw/coco/')
     # df = get_dataflow('/root/coco/annotations', False, img_path='http://gpu-twg.kakaocdn.net/braincloud/COCO/')
 
-    # TestDataSpeed(df).start()
-    # sys.exit(0)
+    from tensorpack.dataflow.common import TestDataSpeed
+    TestDataSpeed(df).start()
+    sys.exit(0)
 
     with tf.Session() as sess:
         df.reset_state()
