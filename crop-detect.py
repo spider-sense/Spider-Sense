@@ -36,7 +36,6 @@ from lifting.prob_model import Prob3dPose
 from lifting.draw import plot_pose
 
 import math
-from pypapi import events, papi_high as high
 
 from predict import Predictor
 
