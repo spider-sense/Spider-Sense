@@ -8,6 +8,7 @@ Created on Sun Jun 13 13:44:26 2021
 import argparse
 import time
 from pathlib import Path
+import common
 
 import cv2
 import torch
@@ -27,7 +28,6 @@ import logging
 import time
 import ast
 
-import common
 import numpy as np
 from estimator import TfPoseEstimator
 from networks import get_graph_path, model_wh
