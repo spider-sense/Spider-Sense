@@ -162,7 +162,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                 # Writing new results
                 newDet = []
                 for detection in det:
-                    if handheld_map.get(int(detection[5])):
+                    #if handheld_map.get(int(detection[5])):
                         newDet.append(detection)
 
                 # Write results

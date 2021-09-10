@@ -36,9 +36,9 @@ from lifting.prob_model import Prob3dPose
 from lifting.draw import plot_pose
 
 import math
-from pypapi import events, papi_high as high
 
 from predict import Predictor
+from helperFunctions import distGet, getKeyPoints, getCropBoxes, bbox_overlap, medianCropWidth
 
 """
 basic function to get distance between two points
@@ -178,7 +178,7 @@ def medianCropWidth(cropBoxes, img):
     if middleWidth == 0:
         middleWidth += 32    
     
-    return middleWidth
+    return int(middleWidth)
 
 @torch.no_grad()
 def detect(model="mobilenet_thin", # A model option for being cool
@@ -274,9 +274,9 @@ def detect(model="mobilenet_thin", # A model option for being cool
             myImg = im0s
         myImg = letterbox(myImg, imgsz, stride=32)[0]
         keypoints, humans = getKeyPoints(myImg, e)
-        cropBoxes = [getCropBoxes(point[0], myImg, 2.5, device, point[1]) for point in keypoints]       
+        cropBoxes = [getCropBoxes(point[0], myImg, 2, device, point[1]) for point in keypoints]       
         cropBoxes = [box for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
-        checkBoxes = [getCropBoxes(point[0], myImg, 0.75, device, point[1]) for point in keypoints]
+        checkBoxes = [getCropBoxes(point[0], myImg, 1, device, point[1]) for point in keypoints]
         checkBoxes = [box for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
         
         # optimizing crop boxes
@@ -437,7 +437,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
                 newDet = []
                 for detection in det:
                     for crop in checkBoxes:
-                        if bbox_iou(detection, crop) > 0 and handheld_map.get(int(detection[5])):
+                        if bbox_iou(detection, crop) > 0:# and handheld_map.get(int(detection[5])):
                             newDet.append(detection)
                             cv2.putText(im0, "Spider-Sense Tingling!", (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 0, 0), 5)
                             break
