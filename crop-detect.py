@@ -40,7 +40,6 @@ import math
 from predict import Predictor
 from helperFunctions import distGet, getKeyPoints, getCropBoxes, bbox_overlap, medianCropWidth
 
-
 @torch.no_grad()
 def detect(model="mobilenet_thin", # A model option for being cool
            weights='yolov5s.pt',  # model.pt path(s)

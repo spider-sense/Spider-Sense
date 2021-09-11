@@ -17,7 +17,7 @@ def getKeyPoints(img, e):
     print(img.shape)
     w = img.shape[1]
     h = img.shape[0]
-    humans = e.inference(img, scales=[None])
+    humans = e.inference(img, resize_to_default=(w > 0 and h > 0), upsample_size=4.0)
     #print("humans", humans)
     
     # Getting keypoints
