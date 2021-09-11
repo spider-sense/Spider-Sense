@@ -269,9 +269,9 @@ def detect(model="mobilenet_thin", # A model option for being cool
         
         # Openpose getting keypoints and individual crops
         if type(im0s) == list:
-            myImg = im0s[0]
+            myImg = im0s[0].copy()
         else:
-            myImg = im0s
+            myImg = im0s.copy()
         myImg = letterbox(myImg, imgsz, stride=32)[0]
         keypoints, humans = getKeyPoints(myImg, e)
         cropBoxes = [getCropBoxes(point[0], myImg, 2, device, point[1]) for point in keypoints]       
@@ -306,8 +306,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
             i += 1
         
         # removing extra crop boxes
-        for i in range(0, cropBoxes.count(False)):
-            cropBoxes.remove(False)
+        cropBoxes = [i for i in cropBoxes if type(i) != bool]
             
         # if no crops then early exit otherwise getting crop images
         if len(cropBoxes) == 0:
@@ -439,9 +438,9 @@ def detect(model="mobilenet_thin", # A model option for being cool
                     for crop in checkBoxes:
                         if bbox_iou(detection, crop) > 0:# and handheld_map.get(int(detection[5])):
                             newDet.append(detection)
-                            cv2.putText(im0, "Spider-Sense Tingling!", (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 0, 0), 5)
+                            #cv2.putText(im0, "Spider-Sense Tingling!", (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 0, 0), 5)
                             break
-                            
+                """              
                 # Write results
                 for *xyxy, conf, cls in reversed(newDet):
                     if save_txt:  # Write to file
@@ -456,177 +455,27 @@ def detect(model="mobilenet_thin", # A model option for being cool
                         plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
-            
+                #"""
             # write all keypoint boxes and draw humans
             for *xyxy, conf, cls in reversed(cropBoxes):
                 c = int(cls)
                 if xyxy[3] - xyxy[1] > 0 and xyxy[2] - xyxy[0] > 0:
                     #save_one_box(xyxy, imc, file=save_dir/ 'wrist_crops' / names[c] / f'{p.stem}.jpg', BGR=True, pad=0)
                     plot_one_box(xyxy, im0, label="crop", color=colors(c, True), line_thickness=2)
+            """
             for *xyxy, conf, cls in reversed(checkBoxes):
                 c = int(cls)
                 if xyxy[3] - xyxy[1] > 0 and xyxy[2] - xyxy[0] > 0:
                     #save_one_box(xyxy, imc, file=save_dir/ 'wrist_crops' / names[c] / f'{p.stem}.jpg', BGR=True, pad=0)
                     plot_one_box(xyxy, im0, label="in", color=colors(c, True), line_thickness=2)
-            #im0 = TfPoseEstimator.draw_humans(im0, humans, imgcopy=False)
-            
-            # Stream results
-            if view_img:
-                cv2.imshow(str(p), im0)
-                cv2.waitKey(1)  # 1 millisecond
-
-            # Save results (image with detections)
-            if save_img:
-                if dataset.mode == 'image':
-                    cv2.imwrite(save_path, im0)
-                else:  # 'video' or 'stream'
-                    if vid_path != save_path:  # new video
-                        vid_path = save_path
-                        if isinstance(vid_writer, cv2.VideoWriter):
-                            vid_writer.release()  # release previous video writer
-                        if vid_cap:  # video
-                            fps = vid_cap.get(cv2.CAP_PROP_FPS)
-                            w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                            h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                        else:  # stream
-                            fps, w, h = 30, im0.shape[1], im0.shape[0]
-                            save_path += '.mp4'
-                        vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-                    vid_writer.write(im0)
-
-        """
-        # Actually doing the torch things for our image
-        img = torch.from_numpy(img).to(device)
-        img = img.half() if half else img.float()  # uint8 to fp16/32
-        img /= 255.0  # 0 - 255 to 0.0 - 1.0
-        if img.ndimension() == 3:
-            img = img.unsqueeze(0)
-        """    
-        
-        """
-        # running inference on the crops after resizing them with letterbox
-        #high.flops()
-        t_one = time_sync()
-        crops = []
-        for i in range(0, len(cropImages)):
-            # doing dataseet changes
-            crop = letterbox(cropImages[i], 128, stride=32)[0]
-            crop = crop.transpose((2, 0, 1))[::-1]
-            crop = np.ascontiguousarray(crop)
-            crop = crop.astype(float)
-            crops.append(crop)
-        
-        # actual inference + NMS
-        crops = np.array(crops)
-        crops /= 255.0
-        crops = torch.from_numpy(crops).to(device)
-        crops = crops.half() if half else crops.float()
-        print("nap time:", crops.shape)
-        t_two = time_sync()
-        #for i in range(0, 1000):
-        preds = model(crops, augment=augment)[0]
-        preds = non_max_suppression(preds, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
-        t2 = time_sync()
-        #FLOPs = high.stop_counters()
-        FLOPs = 69
-        
-        # Print time (inference + NMS)
-        print(f'Done. ({t2 - t_one:.3f}s) ({t_two - t_one:.3f}s) ({t2 - t1:.3f}s) {FLOPs} FLOPs')
-        
-        # Saving bounding boxes
-        for im, pred in enumerate(preds):
-            cropBox = cropBoxes[im]
-            for i, det in enumerate(pred):
-                print(det)
-                if webcam:  # batch_size >= 1
-                    p, s, im0, frame = path[i], f'{i}: ', im0s[i].copy(), dataset.count
-                else:
-                    p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
-                    
-                for i in range(0, len(det)):
-                    pass
-                
-                p = Path(p)  # to Path
-                save_path = str(save_dir / p.name)  # img.jpg
-                txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
-                #s += '%gx%g ' % img.shape[2:]  # print string
-                gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
-                imc = im0.copy() if save_crop else im0  # for save_crop       
-        #"""    
-        """   
-        # Inference
-        pred = model(img, augment=augment)[0]
-
-        # Apply NMS
-        pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
-        t2 = time_sync()
-                
-        # Apply Classifier
-        if classify:
-            pred = apply_classifier(pred, modelc, img, im0s)
-
-        # Process detections
-        for i, det in enumerate(pred):  # detections per image
-            if webcam:  # batch_size >= 1
-                p, s, im0, frame = path[i], f'{i}: ', im0s[i].copy(), dataset.count
-            else:
-                p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
-            
-            p = Path(p)  # to Path
-            save_path = str(save_dir / p.name)  # img.jpg
-            txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
-            s += '%gx%g ' % img.shape[2:]  # print string
-            gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
-            imc = im0.copy() if save_crop else im0  # for save_crop
-            if len(det):
-                # Rescale boxes from img_size to im0 size
-                det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
-
-                # Print results
-                for c in det[:, -1].unique():
-                    n = (det[:, -1] == c).sum()  # detections per class
-                    s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-
-                # Check if any overlap between keypoint and det (handheld weapon)
-                for detection in det:
-                    for crop in cropBoxes:
-                        if bbox_iou(detection, crop) > 0:
-                            cv2.putText(im0, "Spider-Sense Tingling!", (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 0, 0), 5)
-                            break
-                            
-                # Write results
-                for *xyxy, conf, cls in reversed(det):
-                    print(xyxy)
-                    print(imc.shape)
-                    if save_txt:  # Write to file
-                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
-                        with open(txt_path + '.txt', 'a') as f:
-                            f.write(('%g ' * len(line)).rstrip() % line + '\n')
-
-                    if save_img or save_crop or view_img:  # Add bbox to image
-                        c = int(cls)  # integer class
-                        label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
-                        plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
-                        if save_crop:
-                            save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
-                
-                # write keypoint boxes
-                for *xyxy, conf, cls in reversed(cropBoxes):
-                    if xyxy[3] - xyxy[1] > 0 and xyxy[2] - xyxy[0] > 0:
-                        #save_one_box(xyxy, imc, file=save_dir/ 'wrist_crops' / names[c] / f'{p.stem}.jpg', BGR=True, pad=0)
-                        plot_one_box(xyxy, imc, label="keyP", color=colors(c, True), line_thickness=line_thickness)
-
-            # Print time (inference + NMS)
-            print(f'{s}Done. ({t2 - t1:.3f}s)')
-
-            # Stream results
-            if view_img:
-                cv2.imshow(str(p), im0)
-                cv2.waitKey(1)  # 1 millisecond
-
-            # Save results (image with detections)
             im0 = TfPoseEstimator.draw_humans(im0, humans, imgcopy=False)
+            """
+            # Stream results
+            if view_img:
+                cv2.imshow(str(p), im0)
+                cv2.waitKey(1)  # 1 millisecond
+
+            # Save results (image with detections)
             if save_img:
                 if dataset.mode == 'image':
                     cv2.imwrite(save_path, im0)
@@ -644,7 +493,6 @@ def detect(model="mobilenet_thin", # A model option for being cool
                             save_path += '.mp4'
                         vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                     vid_writer.write(im0)
-                    """
 
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''

@@ -129,16 +129,16 @@ def detect(model="mobilenet_thin", # A model option for being cool
         
         # Openpose getting keypoints and individual crops
         if type(im0s) == list:
-            myImg = im0s[0]
+            myImg = im0s[0].copy()
         else:
-            myImg = im0s
+            myImg = im0s.copy()
         myImg = letterbox(myImg, imgsz, stride=32)[0]
         keypoints, humans = getKeyPoints(myImg, e)
         cropBoxes = [getCropBoxes(point[0], myImg, 2, device, point[1]) for point in keypoints]       
         cropBoxes = [box for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
         checkBoxes = [getCropBoxes(point[0], myImg, 1, device, point[1]) for point in keypoints]
         checkBoxes = [box for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
-        """
+        
         # optimizing crop boxes
         i = 0
         while i < len(cropBoxes) - 1:
@@ -164,10 +164,9 @@ def detect(model="mobilenet_thin", # A model option for being cool
                     cropBoxes.append(rectBox)
                     break
             i += 1
-        """
+        
         # removing extra crop boxes
-        for i in range(0, cropBoxes.count(False)):
-            cropBoxes.remove(False)
+        cropBoxes = [i for i in cropBoxes if type(i) != bool]
             
         # if no crops then early exit otherwise getting crop images
         if len(cropBoxes) == 0:
