@@ -164,7 +164,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
             img = img.unsqueeze(0)
         
         print("nap time:", img.shape)
-        epochs = 1000
+        epochs = 1
         time_two = time_sync()
         for i in range(0, epochs):
             pred = model(img, augment=augment)[0]
@@ -204,15 +204,15 @@ def detect(model="mobilenet_thin", # A model option for being cool
 
             # properly scaling the bounding boxes
             for i in range(0, len(cropBoxes)):
-                cropBoxes[i][0] = round(cropBoxes[i][0]/myImg.shape[1] * im0.shape[1])
-                cropBoxes[i][2] = round(cropBoxes[i][2]/myImg.shape[1] * im0.shape[1])
-                cropBoxes[i][1] = round(cropBoxes[i][1]/myImg.shape[0] * im0.shape[0])
-                cropBoxes[i][3] = round(cropBoxes[i][3]/myImg.shape[0] * im0.shape[0])
+                cropBoxes[i][0] = (cropBoxes[i][0]/myImg.shape[1] * im0.shape[1]).round()
+                cropBoxes[i][2] = (cropBoxes[i][2]/myImg.shape[1] * im0.shape[1]).round()
+                cropBoxes[i][1] = (cropBoxes[i][1]/myImg.shape[0] * im0.shape[0]).round()
+                cropBoxes[i][3] = (cropBoxes[i][3]/myImg.shape[0] * im0.shape[0]).round()
             for i in range(0, len(checkBoxes)):
-                checkBoxes[i][0] = round(checkBoxes[i][0]/myImg.shape[1] * im0.shape[1])
-                checkBoxes[i][2] = round(checkBoxes[i][2]/myImg.shape[1] * im0.shape[1])
-                checkBoxes[i][1] = round(checkBoxes[i][1]/myImg.shape[0] * im0.shape[0])
-                checkBoxes[i][3] = round(checkBoxes[i][3]/myImg.shape[0] * im0.shape[0])
+                checkBoxes[i][0] = (checkBoxes[i][0]/myImg.shape[1] * im0.shape[1]).round()
+                checkBoxes[i][2] = (checkBoxes[i][2]/myImg.shape[1] * im0.shape[1]).round()
+                checkBoxes[i][1] = (checkBoxes[i][1]/myImg.shape[0] * im0.shape[0]).round()
+                checkBoxes[i][3] = (checkBoxes[i][3]/myImg.shape[0] * im0.shape[0]).round()
 
             if len(det):
                 # Rescale boxes from img_size to im0 size and same thing done for crops and check boxes
