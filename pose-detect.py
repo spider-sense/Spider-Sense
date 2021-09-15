@@ -137,9 +137,9 @@ def detect(model="mobilenet_thin", # A model option for being cool
         #myImg = predictor(myImg, None)
         keypoints, humans = getKeyPoints(myImg, e)
         cropBoxes = [getCropBoxes(point[0], myImg, 3, device, point[1]) for point in keypoints]       
-        cropBoxes = [box for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+        cropBoxes = [torch.Tensor(box).to(device) for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
         checkBoxes = [getCropBoxes(point[0], myImg, 0.75, device, point[1]) for point in keypoints]
-        checkBoxes = [box for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+        checkBoxes = [torch.Tensor(box).to(device) for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
                 
         # if no crops then early exit
         if len(cropBoxes) == 0:
