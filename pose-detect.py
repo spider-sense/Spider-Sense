@@ -164,7 +164,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
             img = img.unsqueeze(0)
         
         print("nap time:", img.shape)
-        epochs = 1
+        epochs = 1000
         time_two = time_sync()
         for i in range(0, epochs):
             pred = model(img, augment=augment)[0]
@@ -201,19 +201,22 @@ def detect(model="mobilenet_thin", # A model option for being cool
             s += '%gx%g ' % img.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             imc = im0.copy() if save_crop else im0  # for save_crop
+
+            # properly scaling the bounding boxes
+            for i in range(0, len(cropBoxes)):
+                cropBoxes[i][0] = round(cropBoxes[i][0]/myImg.shape[1] * im0.shape[1])
+                cropBoxes[i][2] = round(cropBoxes[i][2]/myImg.shape[1] * im0.shape[1])
+                cropBoxes[i][1] = round(cropBoxes[i][1]/myImg.shape[0] * im0.shape[0])
+                cropBoxes[i][3] = round(cropBoxes[i][3]/myImg.shape[0] * im0.shape[0])
+            for i in range(0, len(checkBoxes)):
+                checkBoxes[i][0] = round(checkBoxes[i][0]/myImg.shape[1] * im0.shape[1])
+                checkBoxes[i][2] = round(checkBoxes[i][2]/myImg.shape[1] * im0.shape[1])
+                checkBoxes[i][1] = round(checkBoxes[i][1]/myImg.shape[0] * im0.shape[0])
+                checkBoxes[i][3] = round(checkBoxes[i][3]/myImg.shape[0] * im0.shape[0])
+
             if len(det):
                 # Rescale boxes from img_size to im0 size and same thing done for crops and check boxes
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
-                for i in range(0, len(cropBoxes)):
-                    cropBoxes[i][0] = (cropBoxes[i][0]/myImg.shape[1] * im0.shape[1]).round()
-                    cropBoxes[i][2] = (cropBoxes[i][2]/myImg.shape[1] * im0.shape[1]).round()
-                    cropBoxes[i][1] = (cropBoxes[i][1]/myImg.shape[0] * im0.shape[0]).round()
-                    cropBoxes[i][3] = (cropBoxes[i][3]/myImg.shape[0] * im0.shape[0]).round()
-                for i in range(0, len(checkBoxes)):
-                    checkBoxes[i][0] = (checkBoxes[i][0]/myImg.shape[1] * im0.shape[1]).round()
-                    checkBoxes[i][2] = (checkBoxes[i][2]/myImg.shape[1] * im0.shape[1]).round()
-                    checkBoxes[i][1] = (checkBoxes[i][1]/myImg.shape[0] * im0.shape[0]).round()
-                    checkBoxes[i][3] = (checkBoxes[i][3]/myImg.shape[0] * im0.shape[0]).round()
                 
                 # Check if any overlap between keypoint and checkBoxes (handheld weapon)
                 newDet = []
@@ -250,17 +253,17 @@ def detect(model="mobilenet_thin", # A model option for being cool
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
                             
-                # write keypoint boxes
-                for *xyxy, conf, cls in reversed(cropBoxes):
-                    c = int(cls)
-                    if xyxy[3] - xyxy[1] > 0 and xyxy[2] - xyxy[0] > 0:
-                        #save_one_box(xyxy, imc, file=save_dir/ 'wrist_crops' / names[c] / f'{p.stem}.jpg', BGR=True, pad=0)
-                        plot_one_box(xyxy, im0, label="out", color=colors(c, True), line_thickness=5)
-                for *xyxy, conf, cls in reversed(checkBoxes):
-                    c = int(cls)
-                    if xyxy[3] - xyxy[1] > 0 and xyxy[2] - xyxy[0] > 0:
-                        #save_one_box(xyxy, imc, file=save_dir/ 'wrist_crops' / names[c] / f'{p.stem}.jpg', BGR=True, pad=0)
-                        plot_one_box(xyxy, im0, label="in", color=colors(c, True), line_thickness=5)
+            # write keypoint boxes
+            for *xyxy, conf, cls in reversed(cropBoxes):
+                c = int(cls)
+                if xyxy[3] - xyxy[1] > 0 and xyxy[2] - xyxy[0] > 0:
+                    #save_one_box(xyxy, imc, file=save_dir/ 'wrist_crops' / names[c] / f'{p.stem}.jpg', BGR=True, pad=0)
+                    plot_one_box(xyxy, im0, label="out", color=colors(c, True), line_thickness=5)
+            for *xyxy, conf, cls in reversed(checkBoxes):
+                c = int(cls)
+                if xyxy[3] - xyxy[1] > 0 and xyxy[2] - xyxy[0] > 0:
+                    #save_one_box(xyxy, imc, file=save_dir/ 'wrist_crops' / names[c] / f'{p.stem}.jpg', BGR=True, pad=0)
+                    plot_one_box(xyxy, im0, label="in", color=colors(c, True), line_thickness=5)
                         
             # Print time (inference + NMS)
             print(f'{s}Done. ({t2 - t1:.3f}s)')
