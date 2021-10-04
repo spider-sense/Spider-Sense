@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 import common
 
+import os
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
@@ -66,11 +67,12 @@ def detect(model="mobilenet_thin", # A model option for being cool
            hide_labels=False,  # hide labels
            hide_conf=False,  # hide confidences
            half=False,  # use FP16 half-precision inference
-           wsl=False # option if WSL is being used 
+           wsl=False, # option if WSL is being used 
+           handheld=False # option for only detecting handheld classes
            ):
     # generating COCO category map
-    category_name = ['tie', 'frisbee', 'sports ball', 'baseball glove', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'potted plant', 'mouse', 'remote', 'cell phone', 'book', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
-    category_ids = [27, 29, 32, 35, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 53, 54, 55, 58, 64, 65, 67, 73, 76, 77, 78, 79]
+    category_name = ['frisbee', 'sports ball', 'baseball glove', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'potted plant', 'mouse', 'remote', 'cell phone', 'book', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
+    category_ids = [29, 32, 35, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 53, 54, 55, 58, 64, 65, 67, 73, 76, 77, 78, 79]
     handheld_map = {}
     for i in range(0, len(category_ids)):
         handheld_map[category_ids[i]] = category_name[i]
@@ -128,6 +130,10 @@ def detect(model="mobilenet_thin", # A model option for being cool
         # starting time sync early due to openpose
         t1 = time_sync()
         
+        # Check if label already done
+        if os.path.isfile("./runs/detect/labels/" + path.split("/")[-1].split(".")[0] + ".txt"):
+            continue
+        
         # Openpose getting keypoints and individual crops
         if type(im0s) == list:
             myImg = im0s[0]
@@ -144,6 +150,33 @@ def detect(model="mobilenet_thin", # A model option for being cool
         # if no crops then early exit
         if len(cropBoxes) == 0:
             print("Done Early:", time_sync()-t1)
+            if webcam:  # batch_size >= 1
+                p, s, im0, frame = path[i], f'{i}: ', im0s[i].copy(), dataset.count
+            else:
+                p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
+            
+            p = Path(p)  # to Path
+            save_path = str(save_dir / p.name)  # img.jpg
+            print("saving to", save_path)
+            # Save results (image with detections)
+            im0 = TfPoseEstimator.draw_humans(im0, humans, imgcopy=False)
+            if save_img:
+                if dataset.mode == 'image':
+                    cv2.imwrite(save_path, im0)
+                else:  # 'video' or 'stream'
+                    if vid_path != save_path:  # new video
+                        vid_path = save_path
+                        if isinstance(vid_writer, cv2.VideoWriter):
+                            vid_writer.release()  # release previous video writer
+                        if vid_cap:  # video
+                            fps = vid_cap.get(cv2.CAP_PROP_FPS)
+                            w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                            h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        else:  # stream
+                            fps, w, h = 30, im0.shape[1], im0.shape[0]
+                            save_path += '.mp4'
+                        vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+                    vid_writer.write(im0)
             continue
         
         # Deblurring image
@@ -219,15 +252,17 @@ def detect(model="mobilenet_thin", # A model option for being cool
                 
                 # Check if any overlap between keypoint and checkBoxes (handheld weapon)
                 newDet = []
+                buttDet = []
                 for detection in det:
                     for crop in cropBoxes:
                         # check if detection in outCrop
+                        if handheld_map.get(int(detection[5])):
+                            buttDet.append(detection)
                         if bbox_iou(detection, crop) > 0 and bbox_overlap(detection, crop) >= 0.6:
                             # checking if overlap between keypoint and cropBoxes
                             for check in checkBoxes:
                                 checkOverlap = bbox_iou(detection, check)
-                                #if handheld_map.get(int(detection[5])) and checkOverlap > 0:
-                                if checkOverlap > 0: 
+                                if (not handheld or handheld_map.get(int(detection[5]))) and checkOverlap > 0:
                                     newDet.append(detection)
                                     cv2.putText(im0, "Spider-Sense Tingling!", (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 0, 0), 5)                
                                     break
@@ -238,7 +273,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
                     n = (det[:, -1] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string                
                            
-                # Write results
+                # Write results (change det if you want to see all boxes and newDet for only valid dets)
                 for *xyxy, conf, cls in reversed(newDet):
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
@@ -249,7 +284,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
                     if save_img or save_crop or view_img:  # Add bbox to image
                         c = int(cls)  # integer class
                         label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
-                        plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=5)
+                        plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
             
@@ -258,12 +293,12 @@ def detect(model="mobilenet_thin", # A model option for being cool
                 c = int(cls)
                 if xyxy[3] - xyxy[1] > 0 and xyxy[2] - xyxy[0] > 0:
                     #save_one_box(xyxy, imc, file=save_dir/ 'wrist_crops' / names[c] / f'{p.stem}.jpg', BGR=True, pad=0)
-                    plot_one_box(xyxy, im0, label="out", color=colors(c, True), line_thickness=5)
+                    plot_one_box(xyxy, im0, color=colors(c, True), line_thickness=5)
             for *xyxy, conf, cls in reversed(checkBoxes):
                 c = int(cls)
                 if xyxy[3] - xyxy[1] > 0 and xyxy[2] - xyxy[0] > 0:
                     #save_one_box(xyxy, imc, file=save_dir/ 'wrist_crops' / names[c] / f'{p.stem}.jpg', BGR=True, pad=0)
-                    plot_one_box(xyxy, im0, label="in", color=colors(c, True), line_thickness=5)
+                    plot_one_box(xyxy, im0, color=colors(c, True), line_thickness=5)
             
             # Print time (inference + NMS)
             print(f'{s}Done. ({t2 - t1:.3f}s)')
@@ -331,6 +366,7 @@ if __name__ == '__main__':
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--wsl', default=False, action='store_true', help='if wsl is used then image not shown')
+    parser.add_argument('--handheld', default=False, action='store_true', help='if wsl is used then image not shown')
     opt = parser.parse_args()
     print(opt)
     #check_requirements(exclude=('tensorboard', 'thop'))

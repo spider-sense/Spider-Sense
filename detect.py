@@ -49,11 +49,12 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         hide_labels=False,  # hide labels
         hide_conf=False,  # hide confidences
         half=False,  # use FP16 half-precision inference
-        wsl=False # option if WSL is being used 
+        wsl=False, # option if WSL is being used
+        handheld=False # option for only detecting handheld classes
         ):
     # generating COCO category map
-    category_name = ['tie', 'frisbee', 'sports ball', 'baseball glove', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'potted plant', 'mouse', 'remote', 'cell phone', 'book', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
-    category_ids = [27, 29, 32, 35, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 53, 54, 55, 58, 64, 65, 67, 73, 76, 77, 78, 79]
+    category_name = ['frisbee', 'sports ball', 'baseball glove', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'potted plant', 'mouse', 'remote', 'cell phone', 'book', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
+    category_ids = [29, 32, 35, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 53, 54, 55, 58, 64, 65, 67, 73, 76, 77, 78, 79]
     handheld_map = {}
     for i in range(0, len(category_ids)):
         handheld_map[category_ids[i]] = category_name[i]
@@ -162,7 +163,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                 # Writing new results
                 newDet = []
                 for detection in det:
-                    #if handheld_map.get(int(detection[5])):
+                    if not handheld or handheld_map.get(int(detection[5])):
                         newDet.append(detection)
 
                 # Write results
@@ -244,6 +245,7 @@ def parse_opt():
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--wsl', default=False, action='store_true', help='if wsl is used then image not shown')
+    parser.add_argument('--handheld', default=False, action='store_true', help='if wsl is used then image not shown')
     opt = parser.parse_args()
     return opt
 

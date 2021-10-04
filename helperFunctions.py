@@ -17,53 +17,70 @@ def getKeyPoints(img, e):
     print(img.shape)
     w = img.shape[1]
     h = img.shape[0]
+    if w >= h:
+        m = w
+    else:
+        m = h
     humans = e.inference(img, scales=[None])
-    #print("humans", humans)
     
     # Getting keypoints
     KP = []
     for human in humans:
         parts = human.body_parts
+        if not (4 in parts or 7 in parts):
+            continue
+        
         head = human.get_face_box(432, 368)
-        if type(head) == dict and head["w"] <= w/8:
+        if type(head) == dict and head["w"] <= m/8 and parts.get(16) != None and parts.get(0) != None and parts.get(17) != None and max([distGet((parts[16].x * w, parts[16].y * h), (parts[0].x * w, parts[0].y * h)), \
+                                                            distGet((parts[0].x * w, parts[0].y * h), (parts[17].x * w, parts[17].y * h))]) < distGet((parts[16].x * w, parts[16].y * h), (parts[17].x * w, parts[17].y * h)):
             headWidth = head["w"]
         else:
-            # change to forearm length
-            leftForearm = -1
+            # getting all arm lengths possible
+            arms = []
             if 7 in parts and 6 in parts:
-                leftForearm = distGet((parts[6].x * w, parts[6].y * h), (parts[7].x * w, parts[7].y * h))
-            rightForearm = -1
+                arms.append(distGet((parts[6].x * w, parts[6].y * h), (parts[7].x * w, parts[7].y * h)))
             if 3 in parts and 4 in parts:
-                rightForearm = distGet((parts[3].x * w, parts[3].y * h), (parts[4].x * w, parts[4].y * h))
+                arms.append(distGet((parts[3].x * w, parts[3].y * h), (parts[4].x * w, parts[4].y * h)))
+            if 2 in parts and 3 in parts:
+                arms.append(distGet((parts[2].x * w, parts[2].y * h), (parts[3].x * w, parts[3].y * h)))
+            if 5 in parts and 7 in parts:
+                arms.append(distGet((parts[5].x * w, parts[5].y * h), (parts[7].x * w, parts[7].y * h)))
+            arms.sort(reverse=True)
             
-            # forearm scenarios
+            # Returning max arm length
             headWidth = False
-            if leftForearm != -1:
-                headWidth = leftForearm
-            elif rightForearm != -1:
-                headWidth = rightForearm
-            elif leftForearm != 1 and rightForearm != 1:
-                headWidth = (leftForearm + rightForearm) / 2
+            for armLength in arms:
+                if armLength <= m/8:
+                    headWidth = armLength
+                    break
             
-            # checking if forearm width is valid
-            if type(headWidth) != bool and headWidth <= w/8:
+            # If can't get anything else then just uses upper body bounding box
+            if type(headWidth) != False:
                 headWidth *= 0.667
             else:
-                headWidth = False
-                
                 # moving onto upper bounding box
                 upperBody = human.get_upper_body_box(432, 368)
-                if type(upperBody) == dict and upperBody["w"] <= w/8:
+                if type(upperBody) == dict and upperBody["w"] <= m/8:
                     headWidth = upperBody["w"]/2
                 else:
-                    headWidth = w/16
-                
+                    headWidth = m/16
+
         # Searching for wrists
+        wrists = True
         if 7 in parts:
             KP.append([parts[7], headWidth])
         if 4 in parts:
             KP.append([parts[4], headWidth])
-                 
+        else:
+            wrists = False
+        
+        # If no wrists then backs up with elbow
+        if not wrists:
+            if 3 in parts:
+                KP.append([parts[3], headWidth])
+            if 6 in parts:
+                KP.append([parts[6], headWidth]) 
+        
     return KP, humans
 
 """
