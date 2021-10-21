@@ -1,3 +1,6 @@
+./models/graph/cmu_640x480
+./models/graph/cmu_640x360
+
 # Repo-specific GitIgnore ----------------------------------------------------------------------------------------------
 
 !cfg/yolov3*.cfg
