@@ -67,7 +67,8 @@ def detect(model="mobilenet_thin", # A model option for being cool
            hide_conf=False,  # hide confidences
            half=False,  # use FP16 half-precision inference
            wsl=False, # option if WSL is being used 
-           handheld=False # option for only detecting handheld classes
+           handheld=False, # option for only detecting handheld classes
+           noDeblur=False # option for whether or not to deblur
            ):
     # generating COCO category map
     category_name = ['frisbee', 'sports ball', 'baseball glove', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'potted plant', 'mouse', 'remote', 'cell phone', 'book', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
@@ -135,7 +136,8 @@ def detect(model="mobilenet_thin", # A model option for being cool
         else:
             myImg = im0s
         myImg = letterbox(myImg, imgsz, stride=32)[0]
-        myImg = predictor(myImg, None)
+        if not noDeblur:
+            myImg = predictor(myImg, None)
         keypoints, humans = getKeyPoints(myImg, e)
         cropBoxes = [getCropBoxes(point[0], myImg, 2, device, point[1]) for point in keypoints]       
         cropBoxes = [torch.Tensor(box).to(device) for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
@@ -362,6 +364,7 @@ if __name__ == '__main__':
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--wsl', default=False, action='store_true', help='if wsl is used then image not shown')
     parser.add_argument('--handheld', default=False, action='store_true', help='if wsl is used then image not shown')
+    parser.add_argument('--noDeblur', default=False, action='store_true', help='option for disabling deblur')
     opt = parser.parse_args()
     print(opt)
     #check_requirements(exclude=('tensorboard', 'thop'))
