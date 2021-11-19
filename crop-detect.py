@@ -5,32 +5,39 @@ Created on Sun Jun 13 13:44:26 2021
 @author: derph
 """
 
+from estimator import TfPoseEstimator
+from networks import get_graph_path, model_wh
+
 import argparse
-import time
+import os
+import sys
 from pathlib import Path
-import common
 
 import cv2
+import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
 
+FILE = Path(__file__).resolve()
+ROOT = FILE.parents[0]  # YOLOv5 root directory
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))  # add ROOT to PATH
+ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
+
 from models.experimental import attempt_load
-from utils.datasets import LoadStreams, LoadImages
-from utils.general import check_img_size, check_requirements, check_imshow, non_max_suppression, apply_classifier, \
-    scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path, save_one_box
+from utils.datasets import LoadImages, LoadStreams
+from utils.general import apply_classifier, check_img_size, check_imshow, check_requirements, check_suffix, colorstr, \
+    increment_path, non_max_suppression, print_args, save_one_box, scale_coords, set_logging, \
+    strip_optimizer, xyxy2xywh
 from utils.metrics import bbox_iou
-from utils.plots import colors, plot_one_box
-from utils.torch_utils import select_device, load_classifier, time_sync
+from utils.plots import Annotator, colors
+from utils.torch_utils import load_classifier, select_device, time_sync
 from utils.augmentations import letterbox
 
 import argparse
 import logging
 import time
 import ast
-
-import numpy as np
-from estimator import TfPoseEstimator
-from networks import get_graph_path, model_wh
 
 from lifting.prob_model import Prob3dPose
 from lifting.draw import plot_pose
@@ -42,9 +49,9 @@ from helperFunctions import distGet, getKeyPoints, getCropBoxes, bbox_overlap, m
 
 @torch.no_grad()
 def detect(model="mobilenet_thin", # A model option for being cool
-           weights='yolov5s.pt',  # model.pt path(s)
+           weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
            weights_path='fpn_mobilenet.h5', # deblurrer path
-           source='data/images',  # file/dir/URL/glob, 0 for webcam
+           source=ROOT / 'data/images',  # file/dir/URL/glob, 0 for webcam
            imgsz=640,  # inference size (pixels)
            conf_thres=0.25,  # confidence threshold
            iou_thres=0.45,  # NMS IOU threshold
@@ -59,7 +66,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
            agnostic_nms=False,  # class-agnostic NMS
            augment=False,  # augmented inference
            update=False,  # update all models
-           project='runs/detect',  # save results to project/name
+           project=ROOT / 'runs/detect',  # save results to project/name
            name='exp',  # save results to project/name
            exist_ok=False,  # existing project/name ok, do not increment
            line_thickness=3,  # bounding box thickness (pixels)
@@ -67,7 +74,11 @@ def detect(model="mobilenet_thin", # A model option for being cool
            hide_conf=False,  # hide confidences
            half=False,  # use FP16 half-precision inference
            wsl=False, # option if WSL is being used 
-           handheld=False # option for only detecting handheld classes
+           handheld=False, # option for only detecting handheld classes
+           noDeblur=False, # option for whether or not to deblur
+           noElbow=False, # option for whether or not to detect elbows
+           innerRatio=1, # inner crop ratio
+           outerRatio=2 # outer crop ratio 
            ):
     # generating COCO maps
     category_name = ['frisbee', 'sports ball', 'baseball glove', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'potted plant', 'mouse', 'remote', 'cell phone', 'book', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
@@ -77,7 +88,8 @@ def detect(model="mobilenet_thin", # A model option for being cool
         handheld_map[category_ids[i]] = category_name[i]
     
     # generating AI models
-    w, h = 432, 368
+    dim = [int(i) for i in model.split("_")[-1].split("x")]
+    w, h = dim[0], dim[1]
     e = TfPoseEstimator(get_graph_path(model), target_size=(w, h))
     predictor = Predictor(weights_path=weights_path)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
@@ -134,20 +146,22 @@ def detect(model="mobilenet_thin", # A model option for being cool
         else:
             myImg = im0s.copy()
         myImg = letterbox(myImg, imgsz, stride=32)[0]
-        keypoints, humans = getKeyPoints(myImg, e)
-        cropBoxes = [getCropBoxes(point[0], myImg, 2, device, point[1]) for point in keypoints]       
+        keypoints, humans = getKeyPoints(myImg, e, noElbow)
+        outerBoxes = [getCropBoxes(point[0], myImg, outerRatio, device, point[1]) for point in keypoints]       
+        outerBoxes = [box for box in outerBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+        cropBoxes = [getCropBoxes(point[0], myImg, outerRatio, device, point[1]) for point in keypoints]       
         cropBoxes = [box for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
-        checkBoxes = [getCropBoxes(point[0], myImg, 1, device, point[1]) for point in keypoints]
+        checkBoxes = [getCropBoxes(point[0], myImg, innerRatio, device, point[1]) for point in keypoints]
         checkBoxes = [box for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
-        """
+        
         # optimizing crop boxes
         i = 0
-        while i < len(cropBoxes) - 1:
-            box1 = cropBoxes[i]
+        while i < len(outerBoxes) - 1:
+            box1 = outerBoxes[i]
             area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
-            for j in range(i + 1, len(cropBoxes)):             
+            for j in range(i + 1, len(outerBoxes)):             
                 # getting necessary info to determine crop information
-                box2 = cropBoxes[j]
+                box2 = outerBoxes[j]
                 area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
                 rectBox = [min(box1[0], box2[0]), min(box1[1], box2[1]), \
                            max(box1[2], box2[2]), max(box1[3], box2[3]), 0, 0]
@@ -156,49 +170,74 @@ def detect(model="mobilenet_thin", # A model option for being cool
                 # doing checks to determine if boxes should be combined
                 if area1 + area2 > areaLarge and (bbox_overlap(box1, box2) >= 0.4 or \
                                                   bbox_overlap(box2, box1) >= 0.4):
-                    cropBoxes.append(rectBox)
-                    cropBoxes.pop(j)
-                    cropBoxes.pop(i)
+                    outerBoxes.append(rectBox)
+                    outerBoxes.pop(j)
+                    outerBoxes.pop(i)
                     i -= 1
                     break
             i += 1      
-        """    
+            
         # if no crops then early exit otherwise getting crop images
-        if len(cropBoxes) == 0:
+        if len(outerBoxes) == 0:
             print("Done Early:", time_sync()-t1)
             continue
 
         # sorting crop boxes to determine collage size
-        cropBoxes.sort(key = lambda x: max(x[3]-x[1], x[2]-x[0]))
-        medianWidth = medianCropWidth(cropBoxes, myImg)
+        outerBoxes.sort(key = lambda x: max(x[3]-x[1], x[2]-x[0]))
+        medianWidth = medianCropWidth(outerBoxes, myImg)
+        outerBoxes = [torch.Tensor(i).to(device) for i in outerBoxes]
         cropBoxes = [torch.Tensor(i).to(device) for i in cropBoxes]
         checkBoxes = [torch.Tensor(i).to(device) for i in checkBoxes]
         
-        cropImages = [save_one_box(box[:4], myImg, BGR=True, save=False) for box in cropBoxes]
+        cropImages = [save_one_box(box[:4], myImg, BGR=True, save=False) for box in outerBoxes]
         
         # generating one big image containing all of the crops plus cropPad tracker
         time_one = time_sync()
         crops = []
+        batchCrops = []
         cropPads = []
         medianWidth = round(medianWidth)
         for i in range(0, len(cropImages)):
+            """
+            batchCrop = letterbox(cropImages[i], medianWidth, stride=32)[0]
+            x, y = 0, 0
+            if batchCrop.shape[0] < medianWidth:
+                y = medianWidth - batchCrop.shape[0]
+                batchCrop = np.vstack((batchCrop, np.zeros((y, medianWidth, 3))))
+            elif batchCrop.shape[1] < medianWidth:
+                x = medianWidth - batchCrop.shape[1]
+                batchCrop = np.hstack((batchCrop, np.zeros((medianWidth, x, 3))))
+            batchCrop = batchCrop.transpose((2, 0, 1))[::-1]
+            batchCrop = np.ascontiguousarray(batchCrop)
+            batchCrop = batchCrop.astype(float)
+            batchCrops.append(batchCrop)            
+            """           
             crop = letterbox(cropImages[i], medianWidth, stride=32)[0]
-            x = 0
-            y = 0
+            x, y = 0, 0
             if crop.shape[0] < medianWidth:
                 y = medianWidth - crop.shape[0]
-                crop = np.vstack((crop, np.zeros((x, medianWidth, 3))))
+                crop = np.vstack((crop, np.zeros((y, medianWidth, 3))))
             elif crop.shape[1] < medianWidth:
                 x = medianWidth - crop.shape[1]
-                crop = np.hstack((crop, np.zeros((medianWidth, medianWidth - crop.shape[1], 3))))
+                crop = np.hstack((crop, np.zeros((medianWidth, x, 3))))
              
             cropPads.append((x, y))
             crops.append(crop)
-        
+        """
+        # creating batch crop input
+        batchCrops = predictor(batchCrops, None)
+        batchCrops = torch.from_numpy(np.array(batchCrops)).to(device)
+        batchCrops = batchCrops.half() if half else batchCrops.float()
+        if not noDeblur:
+            batchCrops = predictor(batchCrops, None)
+        batchTest = model(batchCrops, augment=augment)[0]
+        """
         # Actually doing the torch things for our image but not before running deblur
         bigIm = np.vstack(tuple(crops))
+        
         timeDeblurOne = time_sync()
-        #bigIm = predictor(bigIm, None)
+        if not noDeblur:
+            bigIm = predictor(bigIm, None)
         timeDeblurTwo = time_sync()
         #cv2.imwrite("./runs/detect/wrist_crops.jpg", bigIm)
         bigIm = bigIm.transpose((2, 0, 1))[::-1]
@@ -240,6 +279,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
                 p, s, im0, frame = path[j], f'{j}: ', im0s[j].copy(), dataset.count
             else:
                 p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
+            annotator = Annotator(im0, line_width=line_thickness, example=str(names)) 
             p = Path(p)  # to Path
             save_path = str(save_dir / p.name)  # img.jpg
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
@@ -247,7 +287,12 @@ def detect(model="mobilenet_thin", # A model option for being cool
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             imc = im0.copy() if save_crop else im0  # for save_crop
             
-            # resizing check and crop boxes
+            # resizing check, crop, and outer boxes
+            for i in range(0, len(outerBoxes)):
+                outerBoxes[i][0] = (outerBoxes[i][0]/myImg.shape[1] * im0.shape[1]).round()
+                outerBoxes[i][2] = (outerBoxes[i][2]/myImg.shape[1] * im0.shape[1]).round()
+                outerBoxes[i][1] = (outerBoxes[i][1]/myImg.shape[0] * im0.shape[0]).round()
+                outerBoxes[i][3] = (outerBoxes[i][3]/myImg.shape[0] * im0.shape[0]).round()
             for i in range(0, len(cropBoxes)):
                 cropBoxes[i][0] = (cropBoxes[i][0]/myImg.shape[1] * im0.shape[1]).round()
                 cropBoxes[i][2] = (cropBoxes[i][2]/myImg.shape[1] * im0.shape[1]).round()
@@ -265,7 +310,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
                     # finding respective crop box
                     centerDetY = det[i][1] + (det[i][3] - det[i][1]) / 2
                     boxIndex = math.floor(centerDetY / medianWidth)
-                    cropBox = cropBoxes[boxIndex]
+                    cropBox = outerBoxes[boxIndex]
                     pad = cropPads[boxIndex]
                     
                     # reformatting detection to be relative medianWidth by medianWidth square
@@ -288,13 +333,23 @@ def detect(model="mobilenet_thin", # A model option for being cool
                     det[i] = torch.Tensor([cropBox[0]+round(width*(det[i][0]/(medianWidth-pad[0]))), cropBox[1]+round(height*(det[i][1]/(medianWidth-pad[1]))), cropBox[0]+round(width*(det[i][2]/(medianWidth-pad[0]))), cropBox[1]+round(height*(det[i][3]/(medianWidth-pad[1]))), det[i][4], det[i][5]]).to(device)
                 
                 # Check if any overlap between checkBoxes and det (handheld weapon)
+                buttDet = []
                 newDet = []
                 for detection in det:
-                    for crop in checkBoxes:
-                        if bbox_iou(detection, crop) > 0 and (not handheld or handheld_map.get(int(detection[5]))):
-                            newDet.append(detection)
-                            #cv2.putText(im0, "Spider-Sense Tingling!", (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 0, 0), 5)
+                    for crop in cropBoxes:
+                        # check if detection in outCrop
+                        if handheld_map.get(int(detection[5])):
+                            buttDet.append(detection)
+                        if bbox_iou(detection, crop) > 0 and bbox_overlap(detection, crop) >= 0.6:
+                            # checking if overlap between keypoint and cropBoxes
+                            for check in checkBoxes:
+                                checkOverlap = bbox_iou(detection, check)
+                                if (not handheld or handheld_map.get(int(detection[5]))) and checkOverlap > 0:
+                                    newDet.append(detection)
+                                    cv2.putText(im0, "Spider-Sense Tingling!", (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 0, 0), 5)                
+                                    break
                             break
+                        
                 # Write results
                 for *xyxy, conf, cls in reversed(newDet):
                     if save_txt:  # Write to file
@@ -306,21 +361,26 @@ def detect(model="mobilenet_thin", # A model option for being cool
                     if save_img or save_crop or view_img:  # Add bbox to image
                         c = int(cls)  # integer class
                         label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
-                        plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
+                        annotator.box_label(xyxy, label, color=colors(c, True))
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
                 
             # write all keypoint boxes and draw humans
+            for *xyxy, conf, cls in reversed(outerBoxes):
+                c = int(cls)
+                if xyxy[3] - xyxy[1] > 0 and xyxy[2] - xyxy[0] > 0:
+                    #save_one_box(xyxy, imc, file=save_dir/ 'wrist_crops' / names[c] / f'{p.stem}.jpg', BGR=True, pad=0)
+                        annotator.box_label(xyxy, color=colors(c, True))
             for *xyxy, conf, cls in reversed(cropBoxes):
                 c = int(cls)
                 if xyxy[3] - xyxy[1] > 0 and xyxy[2] - xyxy[0] > 0:
                     #save_one_box(xyxy, imc, file=save_dir/ 'wrist_crops' / names[c] / f'{p.stem}.jpg', BGR=True, pad=0)
-                    plot_one_box(xyxy, im0, color=colors(c, True), line_thickness=2)
+                    annotator.box_label(xyxy, color=colors(c, True))
             for *xyxy, conf, cls in reversed(checkBoxes):
                 c = int(cls)
                 if xyxy[3] - xyxy[1] > 0 and xyxy[2] - xyxy[0] > 0:
                     #save_one_box(xyxy, imc, file=save_dir/ 'wrist_crops' / names[c] / f'{p.stem}.jpg', BGR=True, pad=0)
-                    plot_one_box(xyxy, im0, color=colors(c, True), line_thickness=2)
+                    annotator.box_label(xyxy, color=colors(c, True))
             im0 = TfPoseEstimator.draw_humans(im0, humans, imgcopy=False)
 
             # Stream results
@@ -386,6 +446,10 @@ if __name__ == '__main__':
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--wsl', default=False, action='store_true', help='if wsl is used then image not shown')
     parser.add_argument('--handheld', default=False, action='store_true', help='if wsl is used then image not shown')    
+    parser.add_argument('--noDeblur', default=False, action='store_true', help='option for disabling deblur')
+    parser.add_argument('--noElbow', default=False, action='store_true', help='option for disabling elbow check')
+    parser.add_argument('--innerRatio', default=1, type=int, help='inner crop ratio for pipeline')
+    parser.add_argument('--outerRatio', default=2, type=int, help='outer crop ratio for pipeline')
     opt = parser.parse_args()
     print(opt)
     #check_requirements(exclude=('tensorboard', 'thop'))

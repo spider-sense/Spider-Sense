@@ -193,7 +193,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
         crops /= 255.0
         crops = torch.from_numpy(crops).to(device)
         crops = crops.half() if half else crops.float()
-        
+            
         print("nap time:", crops.shape)
         epochs = 1
         t_two = time_sync()
