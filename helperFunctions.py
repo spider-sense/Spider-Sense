@@ -1,7 +1,7 @@
 import math
 from utils.general import non_max_suppression
-from pose_estimation.pose.utils.boxes import letterbox, scale_boxes, non_max_suppression, xyxy2xywh
-from pose_estimation.pose.utils.decode import get_final_preds, get_simdr_final_preds
+from poseEstimation.pose.utils.boxes import letterbox, scale_boxes, non_max_suppression, xyxy2xywh
+from poseEstimation.pose.utils.decode import get_final_preds, get_simdr_final_preds
 
 """
 basic function to get distance between two points

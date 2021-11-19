@@ -12,11 +12,11 @@ from pathlib import Path
 from torchvision import transforms as T
 
 try:
-    from pose_estimation.pose.models import get_pose_model
-    from pose_estimation.pose.utils.boxes import letterbox, scale_boxes, non_max_suppression, xyxy2xywh
-    from pose_estimation.pose.utils.decode import get_final_preds, get_simdr_final_preds
-    from pose_estimation.pose.utils.utils import setup_cudnn, get_affine_transform, draw_keypoints
-    from pose_estimation.pose.utils.utils import VideoReader, VideoWriter, WebcamStream, FPS
+    from poseEstimation.pose.models import get_pose_model
+    from poseEstimation.pose.utils.boxes import letterbox, scale_boxes, non_max_suppression, xyxy2xywh
+    from poseEstimation.pose.utils.decode import get_final_preds, get_simdr_final_preds
+    from poseEstimation.pose.utils.utils import setup_cudnn, get_affine_transform, draw_keypoints
+    from poseEstimation.pose.utils.utils import VideoReader, VideoWriter, WebcamStream, FPS
 except:
     from pose.models import get_pose_model
     from pose.utils.boxes import letterbox, scale_boxes, non_max_suppression, xyxy2xywh
@@ -26,8 +26,8 @@ except:
 
 import sys
 try:
-    from pose_estimation.yolov5.models.experimental import attempt_load
-    from pose_estimation.yolov5.utils.plots import Annotator
+    from poseEstimation.yolov5.models.experimental import attempt_load
+    from poseEstimation.yolov5.utils.plots import Annotator
 except:
     from yolov5.models.experimental import attempt_load
     from yolov5.utils.plots import Annotator

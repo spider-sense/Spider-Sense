@@ -46,14 +46,14 @@ import math
 
 from predict import Predictor
 from helperFunctions import distGet, getKeyPoints, getCropBoxes, bbox_overlap, medianCropWidth
-from pose_estimation.infer import Pose
-from pose_estimation.pose.utils.utils import draw_keypoints
+from poseEstimation.infer import Pose
+from poseEstimation.pose.utils.utils import draw_keypoints
 
 @torch.no_grad()
 def detect(model="mobilenet_thin", # A model option for being cool
            weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
            det_model=ROOT/ 'crowdhuman_yolov5m.pt', # detection model for pose
-           pose_model=ROOT/ 'pose_estimation/simdr_hrnet_w48_256x192.pth', # pose model
+           pose_model=ROOT/ 'poseEstimation/simdr_hrnet_w48_256x192.pth', # pose model
            weights_path='fpn_mobilenet.h5', # deblurrer path
            source=ROOT / 'data/images',  # file/dir/URL/glob, 0 for webcam
            imgsz=640,  # inference size (pixels)
@@ -437,7 +437,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, default='cmu', help='cmu / mobilenet_thin / mobilenet_v2_large / mobilenet_v2_small')
     parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model path(s)')
     parser.add_argument('--det-model', nargs='+', type=str, default='crowdhuman_yolov5m.pt', help='pose detection model path(s)')
-    parser.add_argument('--pose-model', nargs='+', type=str, default='./pose_estimation/simdr_hrnet_w48_256x192.pth', help='pose model path(s)')
+    parser.add_argument('--pose-model', nargs='+', type=str, default='./poseEstimation/simdr_hrnet_w48_256x192.pth', help='pose model path(s)')
     parser.add_argument('--weights_path', default=str, help='weight path for DeblurGANv2')
     parser.add_argument('--source', type=str, default='data/images', help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='inference size (pixels)')
