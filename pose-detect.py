@@ -59,6 +59,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
            imgsz=640,  # inference size (pixels)
            pose_conf_thres=0.4, # pose confidence threshold
            conf_thres=0.25,  # confidence threshold
+           upper_conf_thres=1.1, # confidence threshold for ignoring pipeline
            iou_thres=0.45,  # NMS IOU threshold
            max_det=1000,  # maximum detections per image
            device='',  # cuda device, i.e. 0 or 0,1,2,3 or cpu
@@ -326,7 +327,10 @@ def detect(model="mobilenet_thin", # A model option for being cool
                         buttDet.append(detection)
                     elif handheld_map.get(int(detection[5])):
                         buttDet.append(detection)
-                    if outerDet:
+                    # if handheld detection is confident enough then ignores filter
+                    if handheld_map.get(int(detection[5])) and detection[-2] >= upper_conf_thres:
+                        newDet.append(detection)
+                    elif outerDet:
                         # checking if overlap between keypoint and cropBoxes
                         for check in checkBoxes:
                             checkOverlap = bbox_iou(detection, check)
@@ -442,6 +446,7 @@ if __name__ == '__main__':
     parser.add_argument('--source', type=str, default='data/images', help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
+    parser.add_argument('--upper-conf-thres', type=float, default=1.1, help='confidence threshold at which pipeline won\'t be applied')
     parser.add_argument('--pose-conf-thres', type=float, default=0.4, help='confidence threshold for pose detector')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
