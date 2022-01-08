@@ -49,6 +49,7 @@ from helperFunctions import distGet, getKeyPoints, getCropBoxes, bbox_overlap, m
 from poseEstimation.infer import Pose
 from poseEstimation.pose.utils.utils import draw_keypoints
 
+
 @torch.no_grad()
 def detect(model="mobilenet_thin", # A model option for being cool
            weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
@@ -90,24 +91,22 @@ def detect(model="mobilenet_thin", # A model option for being cool
            outerDet=True, # option for using outer det vs outer crop width
            innerRatio=1, # inner crop ratio
            outerRatio=2, # outer crop ratio
-           poseNum=3 # number of detections to switch pose estimator
+           poseNum=3, # number of detections to switch pose estimator
+           overlap=0.25 # amount of overlap needed with check boxes to be TP-valid
            ):
     # generating COCO category map
-    category_name = ['frisbee', 'sports ball', 'baseball glove', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'potted plant', 'mouse', 'remote', 'cell phone', 'book', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
-    category_ids = [29, 32, 35, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 53, 54, 55, 58, 64, 65, 67, 73, 76, 77, 78, 79]
-    handheld_map = {}
-    for i in range(0, len(category_ids)):
-        handheld_map[category_ids[i]] = category_name[i]
+    handheld_map = {29: 'frisbee', 32: 'sports ball', 35: 'baseball glove', 39: 'bottle', 40: 'wine glass', 41: 'cup', 42: 'fork', 43: 'knife', 44: 'spoon', 45: 'bowl', 46: 'banana', 47: 'apple', 48: 'sandwich', 49: 'orange', 51: 'carrot', 52: 'hot dog', 53: 'pizza', 54: 'donut', 55: 'cake', 58: 'potted plant', 64: 'mouse', 65: 'remote', 67: 'cell phone', 73: 'book', 76: 'scissors', 77: 'teddy bear', 78: 'hair drier', 79: 'toothbrush'}   
     print("map", handheld_map)
     print("SAVED", project)
     
     # creating AI model things
+    print(model)
     dim = [int(i) for i in model.split("_")[-1].split("x")]
     w, h = dim[0], dim[1]
     e = TfPoseEstimator(get_graph_path(model), target_size=(w, h))
     pose = Pose(
         det_model,
-        pose_model,
+        pose_model[0],
         imgsz,
         pose_conf_thres,
         iou_thres
@@ -208,7 +207,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
         t2 = time_sync()
         dt[0] += t2 - t1
         
-        # Openpose getting keypoints and individual crops
+        # Openpose deblurring
         if type(im0s) == list:
             myImg = im0s[0]
         else:
@@ -216,50 +215,51 @@ def detect(model="mobilenet_thin", # A model option for being cool
         myImg = letterbox(myImg, imgsz, stride=32)[0]
         if not noDeblur:
             myImg = predictor(myImg, None)
-        keypoints, humans, Openpose = getKeyPoints(myImg, img, e, pose, noElbow, poseNum)
-        print("openpose+points", Openpose)
-        cropBoxes = [getCropBoxes(point[0], myImg, outerRatio, device, point[1], Openpose) for point in keypoints]       
-        cropBoxes = [torch.Tensor(box).to(device) for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
-        checkBoxes = [getCropBoxes(point[0], myImg, innerRatio, device, point[1], Openpose) for point in keypoints]
-        checkBoxes = [torch.Tensor(box).to(device) for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
         
-        # if no crops then early exit
-        if len(cropBoxes) == 0:
-            print("\nDone Early:", time_sync()-t1)
-            if webcam:  # batch_size >= 1
-                p, s, im0, frame = path[i], f'{i}: ', im0s[i].copy(), dataset.count
-            else:
-                p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
+        # if impossible upper_conf_thres then gets keypoints and if no crops then early exits
+        if upper_conf_thres > 1:
+            keypoints, humans, Openpose = getKeyPoints(myImg, img, e, pose, noElbow, poseNum)
+            cropBoxes = [getCropBoxes(point[0], myImg, outerRatio, device, point[1], Openpose) for point in keypoints]       
+            cropBoxes = [torch.Tensor(box).to(device) for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+            checkBoxes = [getCropBoxes(point[0], myImg, innerRatio, device, point[1], Openpose) for point in keypoints]
+            checkBoxes = [torch.Tensor(box).to(device) for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
             
-            if not noPose:
-                if Openpose:
-                    im0 = TfPoseEstimator.draw_humans(im0, humans, imgcopy=False)
+            if len(cropBoxes) == 0:
+                print("\nDone Early:", time_sync()-t1)
+                if webcam:  # batch_size >= 1
+                    p, s, im0, frame = path[0], f'{i}: ', im0s[0].copy(), dataset.count
                 else:
-                    draw_keypoints(im0, humans, pose.coco_skeletons) 
-            p = Path(p)  # to Path
-            save_path = str(save_dir / p.name)  # img.jpg
-            print("saving to", save_path)
-            # Save results (image with detections)
-            if save_img:
-                if dataset.mode == 'image':
-                    cv2.imwrite(save_path, im0)
-                else:  # 'video' or 'stream'
-                    if vid_path != save_path:  # new video
-                        vid_path = save_path
-                        if isinstance(vid_writer, cv2.VideoWriter):
-                            vid_writer.release()  # release previous video writer
-                        if vid_cap:  # video
-                            fps = vid_cap.get(cv2.CAP_PROP_FPS)
-                            w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                            h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                        else:  # stream
-                            fps, w, h = 30, im0.shape[1], im0.shape[0]
-                            save_path += '.mp4'
-                        vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-                    vid_writer.write(im0)
-            continue
-        
-        print("nap time:", img.shape)
+                    p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
+                
+                if not noPose:
+                    if Openpose:
+                        im0 = TfPoseEstimator.draw_humans(im0, humans, imgcopy=False)
+                    else:
+                        draw_keypoints(im0, humans, pose.coco_skeletons) 
+                p = Path(p)  # to Path
+                save_path = str(save_dir / p.name)  # img.jpg
+                print("saving to", save_path)
+                # Save results (image with detections)
+                if save_img:
+                    if dataset.mode == 'image':
+                        cv2.imwrite(save_path, im0)
+                    else:  # 'video' or 'stream'
+                        if vid_path != save_path:  # new video
+                            vid_path = save_path
+                            if isinstance(vid_writer, cv2.VideoWriter):
+                                vid_writer.release()  # release previous video writer
+                            if vid_cap:  # video
+                                fps = vid_cap.get(cv2.CAP_PROP_FPS)
+                                w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                                h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                            else:  # stream
+                                fps, w, h = 30, im0.shape[1], im0.shape[0]
+                                save_path += '.mp4'
+                            vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+                        vid_writer.write(im0)
+                continue
+
+        # running the prediction itself        
         epochs = 1
         visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
         time_two = time_sync()
@@ -277,15 +277,35 @@ def detect(model="mobilenet_thin", # A model option for being cool
         #print("Dataset Preparation:", time_two - time_one)
         #print("Readying keypoints:", timeDeblurOne - t1)
         #print("Deblurring:", timeDeblurTwo - timeDeblurOne)
-        print("Inference:", (time_twoHalf - time_two) / epochs)
-        print("NMS:", (time_three - time_twoHalf) / epochs)
-        print("Inference + NMS:", (time_three - time_two) / epochs)
+        #print("Inference:", (time_twoHalf - time_two) / epochs)
+        #print("NMS:", (time_three - time_twoHalf) / epochs)
+        #print("Inference + NMS:", (time_three - time_two) / epochs)
         #FLOPs = high.stop_counters()
         
         # Apply Classifier
         if classify:
             pred = apply_classifier(pred, modelc, img, im0s)
         
+        # checking if any detections have a confidence below a threshold
+        upperConfNotExceeded = False
+        for i, det in enumerate(pred):
+            for detection in det:
+                if detection[-2] < upper_conf_thres:
+                    upperConfNotExceeded = True
+                    break
+        
+        # creating the crop and checkboxes here if they are needed and not made yet
+        if upper_conf_thres <= 1:
+            if upperConfNotExceeded:
+                keypoints, humans, Openpose = getKeyPoints(myImg, img, e, pose, noElbow, poseNum)
+                cropBoxes = [getCropBoxes(point[0], myImg, outerRatio, device, point[1], Openpose) for point in keypoints]       
+                cropBoxes = [torch.Tensor(box).to(device) for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+                checkBoxes = [getCropBoxes(point[0], myImg, innerRatio, device, point[1], Openpose) for point in keypoints]
+                checkBoxes = [torch.Tensor(box).to(device) for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+            else:
+                cropBoxes = []
+                checkBoxes = []
+
         # Process detections
         for i, det in enumerate(pred):  # detections per image
             if webcam:  # batch_size >= 1
@@ -313,7 +333,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
                 checkBoxes[i][2] = (checkBoxes[i][2]/myImg.shape[1] * im0.shape[1]).round()
                 checkBoxes[i][1] = (checkBoxes[i][1]/myImg.shape[0] * im0.shape[0]).round()
                 checkBoxes[i][3] = (checkBoxes[i][3]/myImg.shape[0] * im0.shape[0]).round()
-            
+               
             if len(det):
                 # Rescale boxes from img_size to im0 size and same thing done for crops and check boxes
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
@@ -330,11 +350,12 @@ def detect(model="mobilenet_thin", # A model option for being cool
                     # if handheld detection is confident enough then ignores filter
                     if handheld_map.get(int(detection[5])) and detection[-2] >= upper_conf_thres:
                         newDet.append(detection)
+                        cv2.putText(im0, "Spider-Sense Tingling!", (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 0, 0), 5)                
                     elif outerDet:
-                        # checking if overlap between keypoint and cropBoxes
+                        # checking if overlap between keypoint and cropBoxes aboe 25%
                         for check in checkBoxes:
                             checkOverlap = bbox_iou(detection, check)
-                            if (not handheld or handheld_map.get(int(detection[5]))) and checkOverlap > 0:
+                            if (not handheld or handheld_map.get(int(detection[5]))) and (bbox_iou(detection, check) > 0 and bbox_overlap(detection, check) >= overlap):
                                 maxWidth = max(detection[3]-detection[1], detection[2]-detection[0])
                                 maxCropW = max(check[3]-check[1], check[2]-check[0])
                                 if maxWidth/maxCropW <= 2.5:
@@ -345,15 +366,13 @@ def detect(model="mobilenet_thin", # A model option for being cool
                         # check if detection in out crop
                         for crop in cropBoxes:
                             if (bbox_iou(detection, crop) > 0 and bbox_overlap(detection, crop) >= 0.6):
-                                # checking if overlap between keypoint and cropBoxes
+                                # checking if overlap between keypoint and checkBoxes
                                 for check in checkBoxes:
                                     checkOverlap = bbox_iou(detection, check)
                                     if (not handheld or handheld_map.get(int(detection[5]))) and checkOverlap > 0:
                                         newDet.append(detection)
                                         cv2.putText(im0, "Spider-Sense Tingling!", (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 0, 0), 5)                
                                         break
-                                break
-
                 # Print results
                 for c in det[:, -1].unique():
                     n = (det[:, -1] == c).sum()  # detections per class
@@ -362,6 +381,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
                 # Write results (change det if you want to see all boxes and newDet for only valid dets)
                 if not allDet:
                     buttDet = newDet
+                #print("\n", buttDet)
                 for *xyxy, conf, cls in reversed(buttDet):
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
@@ -401,7 +421,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
             if view_img:
                 cv2.imshow(str(p), im0)
                 cv2.waitKey(1)  # 1 millisecond
-
+                
         # Save results (image with detections)
         if not noPose:
             if Openpose:
@@ -478,6 +498,7 @@ if __name__ == '__main__':
     parser.add_argument('--innerRatio', default=1, type=int, help='inner crop ratio for pipeline') 
     parser.add_argument('--outerRatio', default=2, type=int, help='outer crop ratio for pipeline') 
     parser.add_argument('--poseNum', default=3, type=int, help='number of humans to swtich pose detections') 
+    parser.add_argument('--overlap', default=0.25, type=float, help='amount of check overlap needed for check boxes') 
     opt = parser.parse_args()
     print(opt)
     #check_requirements(exclude=('tensorboard', 'thop'))
