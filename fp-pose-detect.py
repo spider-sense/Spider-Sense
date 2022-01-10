@@ -51,7 +51,7 @@ from poseEstimation.pose.utils.utils import draw_keypoints
 
 
 @torch.no_grad()
-def detect(model="mobilenet_thin", # A model option for being cool
+def detect(model="mobilenet_thin_432x368", # A model option for being cool
            weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
            det_model=ROOT/ 'crowdhuman_yolov5m.pt', # detection model for pose
            pose_model=ROOT/ 'poseEstimation/simdr_hrnet_w48_256x192.pth', # pose model
@@ -96,7 +96,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
     
     # Getting the False Positives
     import json
-    with open ("falsePositives.json", 'r') as file:
+    with open ("falseNegatives.json", 'r') as file:
         falsePositives = json.loads(file.read())
     #############################
     
@@ -106,7 +106,14 @@ def detect(model="mobilenet_thin", # A model option for being cool
     #############################################
     
     # generating COCO category map
-    handheld_map = {29: 'frisbee', 32: 'sports ball', 35: 'baseball glove', 39: 'bottle', 40: 'wine glass', 41: 'cup', 42: 'fork', 43: 'knife', 44: 'spoon', 45: 'bowl', 46: 'banana', 47: 'apple', 48: 'sandwich', 49: 'orange', 51: 'carrot', 52: 'hot dog', 53: 'pizza', 54: 'donut', 55: 'cake', 58: 'potted plant', 64: 'mouse', 65: 'remote', 67: 'cell phone', 73: 'book', 76: 'scissors', 77: 'teddy bear', 78: 'hair drier', 79: 'toothbrush'}   
+    handheld_map = {29: 'frisbee', 32: 'sports ball', 35: 'baseball glove', \
+                    39: 'bottle', 40: 'wine glass', 41: 'cup', 42: 'fork', \
+                    43: 'knife', 44: 'spoon', 45: 'bowl', 46: 'banana', \
+                    47: 'apple', 48: 'sandwich', 49: 'orange', 51: 'carrot', \
+                    52: 'hot dog', 53: 'pizza', 54: 'donut', 55: 'cake', \
+                    58: 'potted plant', 64: 'mouse', 65: 'remote', \
+                    67: 'cell phone', 73: 'book', 76: 'scissors', \
+                    77: 'teddy bear', 78: 'hair drier', 79: 'toothbrush'} 
     print("map", handheld_map)
     print("SAVED", project)
     
@@ -310,7 +317,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
             if conf >= conf_thres and (save_img or save_crop or view_img):  # Add bbox to image
                 c = int(cls)  # integer class
                 label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
-                annotator.box_label(xyxy, label, color=colors(c, True))
+                annotator.box_label(xyxy, color=colors(50, True))
                 #plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
                 if save_crop:
                     save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
@@ -473,7 +480,7 @@ if __name__ == '__main__':
     parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model path(s)')
     parser.add_argument('--det-model', nargs='+', type=str, default='crowdhuman_yolov5m.pt', help='pose detection model path(s)')
     parser.add_argument('--pose-model', nargs='+', type=str, default='./poseEstimation/simdr_hrnet_w48_256x192.pth', help='pose model path(s)')
-    parser.add_argument('--weights_path', default=str, help='weight path for DeblurGANv2')
+    parser.add_argument('--weights_path', type=str, default="",help='weight path for DeblurGANv2')
     parser.add_argument('--source', type=str, default='data/images', help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')

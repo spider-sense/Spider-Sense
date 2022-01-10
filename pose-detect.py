@@ -227,7 +227,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
             if len(cropBoxes) == 0:
                 print("\nDone Early:", time_sync()-t1)
                 if webcam:  # batch_size >= 1
-                    p, s, im0, frame = path[0], f'{i}: ', im0s[0].copy(), dataset.count
+                    p, s, im0, frame = path[0], '', im0s[0].copy(), dataset.count
                 else:
                     p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
                 
@@ -355,7 +355,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
                         # checking if overlap between keypoint and cropBoxes aboe 25%
                         for check in checkBoxes:
                             checkOverlap = bbox_iou(detection, check)
-                            if (not handheld or handheld_map.get(int(detection[5]))) and (bbox_iou(detection, check) > 0 and bbox_overlap(detection, check) >= overlap):
+                            if (not handheld or handheld_map.get(int(detection[5]))) and (bbox_iou(detection, check) > 0 and bbox_overlap(detection, check) > overlap):
                                 maxWidth = max(detection[3]-detection[1], detection[2]-detection[0])
                                 maxCropW = max(check[3]-check[1], check[2]-check[0])
                                 if maxWidth/maxCropW <= 2.5:
@@ -462,7 +462,7 @@ if __name__ == '__main__':
     parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model path(s)')
     parser.add_argument('--det-model', nargs='+', type=str, default='crowdhuman_yolov5m.pt', help='pose detection model path(s)')
     parser.add_argument('--pose-model', nargs='+', type=str, default='./poseEstimation/simdr_hrnet_w48_256x192.pth', help='pose model path(s)')
-    parser.add_argument('--weights_path', default=str, help='weight path for DeblurGANv2')
+    parser.add_argument('--weights_path', type=str, default="",help='weight path for DeblurGANv2')
     parser.add_argument('--source', type=str, default='data/images', help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
