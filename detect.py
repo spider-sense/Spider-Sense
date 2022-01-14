@@ -59,11 +59,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         handheld=False # option for only detecting handheld classes
         ):
     # generating COCO category map
-    category_name = ['frisbee', 'sports ball', 'baseball glove', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'potted plant', 'mouse', 'remote', 'cell phone', 'book', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
-    category_ids = [29, 32, 35, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 52, 53, 54, 55, 58, 64, 65, 67, 73, 76, 77, 78, 79]
-    handheld_map = {}
-    for i in range(0, len(category_ids)):
-        handheld_map[category_ids[i]] = category_name[i]
+    handheld_map = {29: 'frisbee', 32: 'sports ball', 35: 'baseball glove', 39: 'bottle', 40: 'wine glass', 41: 'cup', 42: 'fork', 43: 'knife', 44: 'spoon', 46: 'banana', 47: 'apple', 48: 'sandwich', 49: 'orange', 50: 'broccoli', 51: 'carrot', 52: 'hot dog', 53: 'pizza', 54: 'donut', 64: 'mouse', 65: 'remote', 67: 'cell phone', 73: 'book', 76: 'scissors', 77: 'teddy bear', 78: 'hair drier', 79: 'toothbrush'}
     print(handheld_map)
     
     source = str(source)

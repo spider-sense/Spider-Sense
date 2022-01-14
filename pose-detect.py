@@ -95,9 +95,21 @@ def detect(model="mobilenet_thin", # A model option for being cool
            overlap=0.25 # amount of overlap needed with check boxes to be TP-valid
            ):
     # generating COCO category map
-    handheld_map = {29: 'frisbee', 32: 'sports ball', 35: 'baseball glove', 39: 'bottle', 40: 'wine glass', 41: 'cup', 42: 'fork', 43: 'knife', 44: 'spoon', 45: 'bowl', 46: 'banana', 47: 'apple', 48: 'sandwich', 49: 'orange', 51: 'carrot', 52: 'hot dog', 53: 'pizza', 54: 'donut', 55: 'cake', 58: 'potted plant', 64: 'mouse', 65: 'remote', 67: 'cell phone', 73: 'book', 76: 'scissors', 77: 'teddy bear', 78: 'hair drier', 79: 'toothbrush'}   
+    handheld_map = {29: 'frisbee', 32: 'sports ball', 35: 'baseball glove', 39: 'bottle', 40: 'wine glass', 41: 'cup', 42: 'fork', 43: 'knife', 44: 'spoon', 46: 'banana', 47: 'apple', 48: 'sandwich', 49: 'orange', 50: 'broccoli', 51: 'carrot', 52: 'hot dog', 53: 'pizza', 54: 'donut', 64: 'mouse', 65: 'remote', 67: 'cell phone', 73: 'book', 76: 'scissors', 77: 'teddy bear', 78: 'hair drier', 79: 'toothbrush'}
     print("map", handheld_map)
     print("SAVED", project)
+    
+    
+    # Creating a pose-cache
+    import os
+    import json
+    blur = "noDeblur" if noDeblur else "Deblur"
+    cacheName = "poseCache" + str(poseNum) + blur + ".json"
+    poseCache = {}
+    if os.path.isfile(cacheName):
+        with open(cacheName, 'r') as file:
+            poseCache = json.loads(file.read())
+    # yessir that's what I'm doing remove this when I'm done
     
     # creating AI model things
     print(model)
@@ -192,21 +204,14 @@ def detect(model="mobilenet_thin", # A model option for being cool
         # starting time sync early due to openpose
         t1 = time_sync()
         
+        # Getting image path for cache
+        imgPath = path.split("/")[-1]
+        # GETTING IMAGE PATH
+        
+        
         # Actually doing the torch things
         time_one = time_sync()
-        if onnx:
-            img = img.astype('float32')
-        else:
-            img = torch.from_numpy(img).to(device)
-            img = img.half() if half else img.float()  # uint8 to fp16/32
-        img /= 255.0  # 0 - 255 to 0.0 - 1.0
-        if img.ndimension() == 3:
-            img = img.unsqueeze(0)
-        if len(img.shape) == 3:
-            img = img[None]  # expand for batch dim
-        t2 = time_sync()
-        dt[0] += t2 - t1
-        
+                
         # Openpose deblurring
         if type(im0s) == list:
             myImg = im0s[0]
@@ -214,14 +219,15 @@ def detect(model="mobilenet_thin", # A model option for being cool
             myImg = im0s
         myImg = letterbox(myImg, imgsz, stride=32)[0]
         if not noDeblur:
+            print("poopylicious!!!!!!!!")
             myImg = predictor(myImg, None)
-        
+        """
         # if impossible upper_conf_thres then gets keypoints and if no crops then early exits
         if upper_conf_thres > 1:
             keypoints, humans, Openpose = getKeyPoints(myImg, img, e, pose, noElbow, poseNum)
             cropBoxes = [getCropBoxes(point[0], myImg, outerRatio, device, point[1], Openpose) for point in keypoints]       
-            cropBoxes = [torch.Tensor(box).to(device) for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
             checkBoxes = [getCropBoxes(point[0], myImg, innerRatio, device, point[1], Openpose) for point in keypoints]
+            cropBoxes = [torch.Tensor(box).to(device) for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
             checkBoxes = [torch.Tensor(box).to(device) for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
             
             if len(cropBoxes) == 0:
@@ -258,6 +264,23 @@ def detect(model="mobilenet_thin", # A model option for being cool
                             vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                         vid_writer.write(im0)
                 continue
+        """
+        # readying the image for detections
+        if not noDeblur:
+            img = myImg.transpose((2, 0, 1))[::-1]
+            img = np.ascontiguousarray(img)
+        if onnx:
+            img = img.astype('float32')
+        else:
+            img = torch.from_numpy(img).to(device)
+            img = img.half() if half else img.float()  # uint8 to fp16/32
+        img /= 255.0  # 0 - 255 to 0.0 - 1.0
+        if img.ndimension() == 3:
+            img = img.unsqueeze(0)
+        if len(img.shape) == 3:
+            img = img[None]  # expand for batch dim
+        t2 = time_sync()
+        dt[0] += t2 - t1
 
         # running the prediction itself        
         epochs = 1
@@ -295,12 +318,20 @@ def detect(model="mobilenet_thin", # A model option for being cool
                     break
         
         # creating the crop and checkboxes here if they are needed and not made yet
-        if upper_conf_thres <= 1:
+        #if upper_conf_thres <= 1:
+        if True:
+            # CHANGE THIS LATER
             if upperConfNotExceeded:
-                keypoints, humans, Openpose = getKeyPoints(myImg, img, e, pose, noElbow, poseNum)
-                cropBoxes = [getCropBoxes(point[0], myImg, outerRatio, device, point[1], Openpose) for point in keypoints]       
+                if not poseCache.get(imgPath):
+                    keypoints, humans, Openpose = getKeyPoints(myImg, img, e, pose, noElbow, poseNum)
+                    cropBoxes = [getCropBoxes(point[0], myImg, outerRatio, device, point[1], Openpose) for point in keypoints]       
+                    checkBoxes = [getCropBoxes(point[0], myImg, innerRatio, device, point[1], Openpose) for point in keypoints]
+                    poseCache[imgPath] = [cropBoxes, checkBoxes, [i[-1] for i in keypoints]]
+                else:
+                    cropBoxes = poseCache[imgPath][0]
+                    checkBoxes = poseCache[imgPath][1]
+                    keypoints = poseCache[imgPath][2]
                 cropBoxes = [torch.Tensor(box).to(device) for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
-                checkBoxes = [getCropBoxes(point[0], myImg, innerRatio, device, point[1], Openpose) for point in keypoints]
                 checkBoxes = [torch.Tensor(box).to(device) for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
             else:
                 cropBoxes = []
@@ -452,6 +483,10 @@ def detect(model="mobilenet_thin", # A model option for being cool
 
     if update:
         strip_optimizer(weights)  # update model (to fix SourceChangeWarning)
+
+    # Open up the pose cache
+    with open(cacheName, 'w') as file:
+        file.write(json.dumps(poseCache))    
 
     print(f'Done. ({time_sync() - t0:.3f}s)')
 

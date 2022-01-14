@@ -17,6 +17,7 @@ settle for the elbows.  Switches between two pose detectors based on conditions.
 img is array and img1 is tensor
 """
 def getKeyPoints(img, img1, e, pose, noElbows, poseNum):    
+    print("WOOHOO I GOT CALLED")
     if poseNum == 0:
         # Running inference
         w = img.shape[1]
