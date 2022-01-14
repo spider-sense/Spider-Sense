@@ -6,9 +6,7 @@ Created on Sun Jun 13 13:44:26 2021
 """
 
 from estimator import TfPoseEstimator
-from networks import get_graph_path, model_wh
 
-import argparse
 import os
 import sys
 from pathlib import Path
@@ -35,18 +33,8 @@ from utils.torch_utils import load_classifier, select_device, time_sync
 from utils.augmentations import letterbox
 
 import argparse
-import logging
-import time
-import ast
 
-from lifting.prob_model import Prob3dPose
-from lifting.draw import plot_pose
-
-import math
-
-from predict import Predictor
 from helperFunctions import distGet, getKeyPoints, getCropBoxes, bbox_overlap, medianCropWidth
-from poseEstimation.infer import Pose
 from poseEstimation.pose.utils.utils import draw_keypoints
 
 
@@ -98,20 +86,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
     handheld_map = {29: 'frisbee', 32: 'sports ball', 35: 'baseball glove', 39: 'bottle', 40: 'wine glass', 41: 'cup', 42: 'fork', 43: 'knife', 44: 'spoon', 45: 'bowl', 46: 'banana', 47: 'apple', 48: 'sandwich', 49: 'orange', 51: 'carrot', 52: 'hot dog', 53: 'pizza', 54: 'donut', 55: 'cake', 58: 'potted plant', 64: 'mouse', 65: 'remote', 67: 'cell phone', 73: 'book', 76: 'scissors', 77: 'teddy bear', 78: 'hair drier', 79: 'toothbrush'}   
     print("map", handheld_map)
     print("SAVED", project)
-    
-    # creating AI model things
-    print(model)
-    dim = [int(i) for i in model.split("_")[-1].split("x")]
-    w, h = dim[0], dim[1]
-    e = TfPoseEstimator(get_graph_path(model), target_size=(w, h))
-    pose = Pose(
-        det_model,
-        pose_model[0],
-        imgsz,
-        pose_conf_thres,
-        iou_thres
-    )
-    predictor = Predictor(weights_path=weights_path)
+
     
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
