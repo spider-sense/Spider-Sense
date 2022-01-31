@@ -87,15 +87,18 @@ def getKeyPoints(img, img1, e, pose, noElbows, poseNum):
             elif not noElbows and parts.get(3):
                 KP.append([parts[3], cropWidth, imType])
             
-        return KP, humans, True
+        return KP, humans, True, 0
     elif poseNum == -1:
+        print("\n\n\nPOOPY APPEAR")
         # getting necessary predictions
         pred = pose.det_model(img1)[0]
         pred = non_max_suppression(pred, pose.conf_thres, pose.iou_thres, classes=0)
         
         # getting necessary poses
         coords = None
+        pplCount = 0
         for det in pred:
+            pplCount = len(det)
             if len(det):
                 boxes = scale_boxes(det[:, :4], img.shape[:2], img1.shape[-2:]).cpu()
                 boxes = pose.box_to_center_scale(boxes)
@@ -107,7 +110,7 @@ def getKeyPoints(img, img1, e, pose, noElbows, poseNum):
                     coords = get_final_preds(outputs, boxes)
         humans = coords
         if humans is None:
-            return [], [], False
+            return [], [], False, 0
         
         # getting all keypoints
         KP = []
@@ -130,7 +133,7 @@ def getKeyPoints(img, img1, e, pose, noElbows, poseNum):
             KP.append([human[9], cropWidth, imType])
             KP.append([human[10], cropWidth, imType])
             
-        return KP, humans, False
+        return KP, humans, False, pplCount
     else:
         # getting necessary predictions
         pred = pose.det_model(img1)[0]
@@ -139,7 +142,7 @@ def getKeyPoints(img, img1, e, pose, noElbows, poseNum):
         for det in pred:
             # if no humans detected then early exit
             if len(det) == 0:
-                return [], [], False
+                return [], [], False, 0
             if len(det) <= poseNum:
                 boxes = scale_boxes(det[:, :4], img.shape[:2], img1.shape[-2:]).cpu()
                 boxes = pose.box_to_center_scale(boxes)
@@ -175,7 +178,7 @@ def getKeyPoints(img, img1, e, pose, noElbows, poseNum):
                 KP.append([human[9], cropWidth, imType])
                 KP.append([human[10], cropWidth, imType])
                 
-            return KP, humans, False
+            return KP, humans, False, 0
         else:
             # Running inference
             w = img.shape[1]
@@ -245,7 +248,7 @@ def getKeyPoints(img, img1, e, pose, noElbows, poseNum):
                 elif not noElbows and parts.get(3):
                     KP.append([parts[3], cropWidth, imType])
                 
-            return KP, humans, True
+            return KP, humans, True, 0
             
 """
 Function for getting the crop of an image.  Will look at headWidth of img.

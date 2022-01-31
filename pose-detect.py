@@ -99,18 +99,25 @@ def detect(model="mobilenet_thin", # A model option for being cool
     print("map", handheld_map)
     print("SAVED", project)
     
-    
-    # Creating a pose-cache
+    """
+    # Creating a pose-cache and person cache
     import os
     import json
     blur = "noDeblur" if noDeblur else "Deblur"
     cacheName = "poseCache" + str(poseNum) + blur + ".json"
     poseCache = {}
     if os.path.isfile(cacheName):
+        print("loading pose cache")
         with open(cacheName, 'r') as file:
             poseCache = json.loads(file.read())
+    personName = "personCache" + str(poseNum) + blur + ".json"
+    personCache = {}
+    if os.path.isfile(personName):
+        print("loading person cache")
+        with open(personName, 'r') as file:
+            personCache = json.loads(file.read())
     # yessir that's what I'm doing remove this when I'm done
-    
+    """
     # creating AI model things
     print(model)
     dim = [int(i) for i in model.split("_")[-1].split("x")]
@@ -123,7 +130,8 @@ def detect(model="mobilenet_thin", # A model option for being cool
         pose_conf_thres,
         iou_thres
     )
-    predictor = Predictor(weights_path=weights_path)
+    if not noDeblur:
+        predictor = Predictor(weights_path=weights_path)
     
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
@@ -200,15 +208,36 @@ def detect(model="mobilenet_thin", # A model option for being cool
         model(torch.zeros(1, 3, *[imgsz, imgsz]).to(device).type_as(next(model.parameters())))  # run once
     dt, seen = [0.0, 0.0, 0.0], 0
     t0 = time_sync()
+    
+    butt = True
+    itr = 0
+    lastPathSaved = ""
     for path, img, im0s, vid_cap in dataset:
         # starting time sync early due to openpose
         t1 = time_sync()
-        
+        """
+        # Open up the pose cache
+        itr += 1
+        if itr % 1000 == 0:
+            lastPathSaved = path
+            
+            with open(cacheName, 'w') as file:
+                file.write(json.dumps(poseCache))
+            if poseNum == -1:
+                with open(personName, 'w') as file:
+                    file.write(json.dumps(personCache))
+        print("\nLast Saved on", lastPathSaved)
+        """
         # Getting image path for cache
         imgPath = path.split("/")[-1]
+        """
+        if imgPath == "000000228676.jpg":
+            butt = False
+        if butt:
+            print()
+            continue
         # GETTING IMAGE PATH
-        
-        
+        """
         # Actually doing the torch things
         time_one = time_sync()
                 
@@ -221,10 +250,10 @@ def detect(model="mobilenet_thin", # A model option for being cool
         if not noDeblur:
             print("poopylicious!!!!!!!!")
             myImg = predictor(myImg, None)
-        """
+        
         # if impossible upper_conf_thres then gets keypoints and if no crops then early exits
         if upper_conf_thres > 1:
-            keypoints, humans, Openpose = getKeyPoints(myImg, img, e, pose, noElbow, poseNum)
+            keypoints, humans, Openpose, ppl = getKeyPoints(myImg, img, e, pose, noElbow, poseNum)
             cropBoxes = [getCropBoxes(point[0], myImg, outerRatio, device, point[1], Openpose) for point in keypoints]       
             checkBoxes = [getCropBoxes(point[0], myImg, innerRatio, device, point[1], Openpose) for point in keypoints]
             cropBoxes = [torch.Tensor(box).to(device) for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
@@ -264,7 +293,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
                             vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                         vid_writer.write(im0)
                 continue
-        """
+        
         # readying the image for detections
         if not noDeblur:
             img = myImg.transpose((2, 0, 1))[::-1]
@@ -281,7 +310,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
             img = img[None]  # expand for batch dim
         t2 = time_sync()
         dt[0] += t2 - t1
-
+        
         # running the prediction itself        
         epochs = 1
         visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
@@ -321,23 +350,32 @@ def detect(model="mobilenet_thin", # A model option for being cool
         #if upper_conf_thres <= 1:
         if True:
             # CHANGE THIS LATER
-            if upperConfNotExceeded:
+            #if upperConfNotExceeded:
+            if True:
+                keypoints, humans, Openpose, pplCount = getKeyPoints(myImg, img, e, pose, noElbow, poseNum)
+                cropBoxes = [getCropBoxes(point[0], myImg, outerRatio, device, point[1], Openpose) for point in keypoints]       
+                checkBoxes = [getCropBoxes(point[0], myImg, innerRatio, device, point[1], Openpose) for point in keypoints]
+                cropBoxes = [torch.Tensor(box).to(device) for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+                checkBoxes = [torch.Tensor(box).to(device) for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+                """
                 if not poseCache.get(imgPath):
-                    keypoints, humans, Openpose = getKeyPoints(myImg, img, e, pose, noElbow, poseNum)
+                    keypoints, humans, Openpose, pplCount = getKeyPoints(myImg, img, e, pose, noElbow, poseNum)
                     cropBoxes = [getCropBoxes(point[0], myImg, outerRatio, device, point[1], Openpose) for point in keypoints]       
                     checkBoxes = [getCropBoxes(point[0], myImg, innerRatio, device, point[1], Openpose) for point in keypoints]
-                    poseCache[imgPath] = [cropBoxes, checkBoxes, [i[-1] for i in keypoints]]
+                    personCache[imgPath] = pplCount
                 else:
                     cropBoxes = poseCache[imgPath][0]
                     checkBoxes = poseCache[imgPath][1]
                     keypoints = poseCache[imgPath][2]
-                cropBoxes = [torch.Tensor(box).to(device) for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
-                checkBoxes = [torch.Tensor(box).to(device) for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+                #cropBoxes = [torch.Tensor(box).to(device) for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+                #checkBoxes = [torch.Tensor(box).to(device) for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+                """
             else:
                 cropBoxes = []
                 checkBoxes = []
-
+        
         # Process detections
+        #pred = ["poop"]
         for i, det in enumerate(pred):  # detections per image
             if webcam:  # batch_size >= 1
                 p, s, im0, frame = path[i], f'{i}: ', im0s[i].copy(), dataset.count
@@ -364,7 +402,24 @@ def detect(model="mobilenet_thin", # A model option for being cool
                 checkBoxes[i][2] = (checkBoxes[i][2]/myImg.shape[1] * im0.shape[1]).round()
                 checkBoxes[i][1] = (checkBoxes[i][1]/myImg.shape[0] * im0.shape[0]).round()
                 checkBoxes[i][3] = (checkBoxes[i][3]/myImg.shape[0] * im0.shape[0]).round()
-               
+            cropBoxes = [torch.Tensor(box).to(device) for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+            checkBoxes = [torch.Tensor(box).to(device) for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+            """
+            if not poseCache.get(imgPath):
+                for i in range(0, len(cropBoxes)):
+                    cropBoxes[i][0] = (cropBoxes[i][0]/myImg.shape[1] * im0.shape[1]).round()
+                    cropBoxes[i][2] = (cropBoxes[i][2]/myImg.shape[1] * im0.shape[1]).round()
+                    cropBoxes[i][1] = (cropBoxes[i][1]/myImg.shape[0] * im0.shape[0]).round()
+                    cropBoxes[i][3] = (cropBoxes[i][3]/myImg.shape[0] * im0.shape[0]).round()
+                for i in range(0, len(checkBoxes)):
+                    checkBoxes[i][0] = (checkBoxes[i][0]/myImg.shape[1] * im0.shape[1]).round()
+                    checkBoxes[i][2] = (checkBoxes[i][2]/myImg.shape[1] * im0.shape[1]).round()
+                    checkBoxes[i][1] = (checkBoxes[i][1]/myImg.shape[0] * im0.shape[0]).round()
+                    checkBoxes[i][3] = (checkBoxes[i][3]/myImg.shape[0] * im0.shape[0]).round()
+                #poseCache[imgPath] = [cropBoxes, checkBoxes, [i[-1] for i in keypoints]]
+            cropBoxes = [torch.Tensor(box).to(device) for box in cropBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+            checkBoxes = [torch.Tensor(box).to(device) for box in checkBoxes if box[3]-box[1] > 0 and box[2]-box[0] > 0]
+            #"""
             if len(det):
                 # Rescale boxes from img_size to im0 size and same thing done for crops and check boxes
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
@@ -378,6 +433,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
                         buttDet.append(detection)
                     elif handheld_map.get(int(detection[5])):
                         buttDet.append(detection)
+                    #"""
                     # if handheld detection is confident enough then ignores filter
                     if handheld_map.get(int(detection[5])) and detection[-2] >= upper_conf_thres:
                         newDet.append(detection)
@@ -404,6 +460,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
                                         newDet.append(detection)
                                         cv2.putText(im0, "Spider-Sense Tingling!", (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 0, 0), 5)                
                                         break
+                    #"""
                 # Print results
                 for c in det[:, -1].unique():
                     n = (det[:, -1] == c).sum()  # detections per class
@@ -459,6 +516,7 @@ def detect(model="mobilenet_thin", # A model option for being cool
                 im0 = TfPoseEstimator.draw_humans(im0, humans, imgcopy=False)
             else:
                 draw_keypoints(im0, humans, pose.coco_skeletons) 
+        
         if save_img:
             if dataset.mode == 'image':
                 cv2.imwrite(save_path, im0)
@@ -476,20 +534,22 @@ def detect(model="mobilenet_thin", # A model option for being cool
                         save_path += '.mp4'
                     vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                 vid_writer.write(im0)
-
+    
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         print(f"Results saved to {save_dir}{s}")
 
     if update:
         strip_optimizer(weights)  # update model (to fix SourceChangeWarning)
-
+    """
     # Open up the pose cache
     with open(cacheName, 'w') as file:
-        file.write(json.dumps(poseCache))    
-
+        file.write(json.dumps(poseCache))
+    if poseNum == -1:
+        with open(personName, 'w') as file:
+            file.write(json.dumps(personCache))
+    """
     print(f'Done. ({time_sync() - t0:.3f}s)')
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
